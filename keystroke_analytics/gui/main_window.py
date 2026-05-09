@@ -275,32 +275,87 @@ class MainWindow(QMainWindow):
         self._refresh_timer.stop()
 
     def _on_started(self) -> None:
+        """Called when capture starts."""
         self._status_badge.setStatus("recording")
         self.setWindowTitle("Keystroke Analytics Pro - 🔴 Recording")
         self._btn_start.setEnabled(False)
         self._btn_stop.setEnabled(True)
+        self._btn_choose_log.setEnabled(False)
+        
+        # Enable auto-refresh of logs during capture
+        self._logs_panel.enable_auto_refresh(interval_ms=2000)
+        
+        # Start stats polling timer
+        self._refresh_timer.start(500)  # Update stats every 500ms for smooth display
 
     def _on_stopped(self) -> None:
+        """Called when capture stops."""
         self._status_badge.setStatus("idle")
         self.setWindowTitle("Keystroke Analytics Pro")
         self._btn_start.setEnabled(True)
         self._btn_stop.setEnabled(False)
+        self._btn_choose_log.setEnabled(True)
         self._refresh_timer.stop()
-        self._logs_panel.set_log_directory(self._log_dir)
+        
+        # Disable auto-refresh of logs
+        self._logs_panel.disable_auto_refresh()
+        
+        # Reset stats display
+        self._stats_panel.reset_display()
+        
+        # Reload logs to show final session
+        if self._log_dir:
+            self._logs_panel.set_log_directory(self._log_dir)
 
     def _on_error(self, message: str) -> None:
-        QMessageBox.critical(self, "Error", message)
+        """Called when an error occurs."""
+        self._status_badge.setStatus("error")
+        logger.error("Capture error: %s", message)
+        QMessageBox.critical(self, "Capture Error", f"An error occurred:\n\n{message}")
 
     def _on_stats_updated(self, stats: dict) -> None:
-        """Handle stats update signal from controller."""
-        self._stats_panel.update_stats(stats)
-        self._report_panel.update_report(stats)
+        """
+        Handle stats update signal from controller.
+        
+        Called periodically during capture to update UI with live statistics.
+        """
+        if not stats:
+            return
+        
+        try:
+            self._stats_panel.update_stats(stats)
+            if self._report_panel:
+                self._report_panel.update_report(stats)
+        except Exception as e:
+            logger.exception("Error updating panels: %s", e)
 
     def _refresh_panels(self) -> None:
-        """Periodic refresh of panels during capture."""
-        self._logs_panel.set_log_directory(self._log_dir)
+        """
+        Periodic refresh of stats during capture.
+        
+        Called by _refresh_timer to poll engine for latest stats.
+        """
+        if self._controller.running:
+            try:
+                stats = self._controller.get_current_stats()
+                if stats:
+                    self._on_stats_updated(stats)
+            except Exception as e:
+                logger.exception("Error refreshing stats: %s", e)
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        if self._controller.running:
-            self._controller.stop()
+        """Clean up before closing window."""
+        try:
+            # Stop capture if running
+            if self._controller.running:
+                logger.info("Stopping capture before exit...")
+                self._controller.stop()
+            
+            # Disable auto-refresh
+            self._logs_panel.disable_auto_refresh()
+            self._refresh_timer.stop()
+            
+        except Exception as e:
+            logger.exception("Error during cleanup: %s", e)
+        
         event.accept()

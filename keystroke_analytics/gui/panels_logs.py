@@ -1,14 +1,18 @@
 """
 Logs viewer panel for displaying captured keystroke logs.
+
+Supports async loading of large files and background refresh during active capture.
 """
 
 from __future__ import annotations
 
 import logging
+import subprocess
+import sys
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, Signal, Slot, QTimer
 from PySide6.QtGui import QTextCursor, QTextCharFormat, QColor, QFont
 from PySide6.QtWidgets import (
     QVBoxLayout,
@@ -20,24 +24,64 @@ from PySide6.QtWidgets import (
     QLabel,
     QFileDialog,
     QMessageBox,
+    QProgressBar,
 )
 
 logger = logging.getLogger(__name__)
 
 
+class LogFileLoader(QThread):
+    """Worker thread for loading large log files asynchronously."""
+    
+    finished = Signal(str)  # Content loaded
+    error = Signal(str)     # Error occurred
+    
+    def __init__(self, file_path: Path) -> None:
+        super().__init__()
+        self.file_path = file_path
+    
+    def run(self) -> None:
+        """Load the file in this thread."""
+        try:
+            if not self.file_path.exists():
+                raise FileNotFoundError(f"Log file not found: {self.file_path}")
+            
+            # Read file with error handling
+            content = self.file_path.read_text(encoding="utf-8", errors="replace")
+            self.finished.emit(content)
+            
+        except Exception as e:
+            logger.exception("Error loading log file: %s", e)
+            self.error.emit(str(e))
+
+
 class LogsPanel(QWidget):
-    """Panel for viewing and managing keystroke logs."""
+    """
+    Panel for viewing and managing keystroke logs.
+    
+    Features:
+    - Async file loading (no UI freeze on large files)
+    - Search with highlighting
+    - Auto-refresh during capture
+    - Copy to clipboard
+    """
 
     def __init__(self) -> None:
         super().__init__()
         self._current_log_file: Optional[Path] = None
+        self._full_content: str = ""
+        self._loader_thread: Optional[LogFileLoader] = None
+        self._refresh_timer: Optional[QTimer] = None
         self._init_ui()
 
     def _init_ui(self) -> None:
+        """Initialize the UI."""
         layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
 
         # Title
-        title = QLabel("Keystroke Logs Viewer")
+        title = QLabel("📋 Keystroke Logs Viewer")
         title.setStyleSheet("font-weight: bold; font-size: 14px;")
         layout.addWidget(title)
 
@@ -46,13 +90,13 @@ class LogsPanel(QWidget):
         file_layout.addWidget(QLabel("Log File:"))
         self._file_path = QLineEdit()
         self._file_path.setReadOnly(True)
-        file_layout.addWidget(self._file_path)
+        file_layout.addWidget(self._file_path, 1)
 
         btn_browse = QPushButton("Browse...")
         btn_browse.clicked.connect(self._browse_logs)
         file_layout.addWidget(btn_browse)
 
-        btn_open_dir = QPushButton("Open Directory")
+        btn_open_dir = QPushButton("📁 Open Directory")
         btn_open_dir.clicked.connect(self._open_log_directory)
         file_layout.addWidget(btn_open_dir)
 
@@ -62,9 +106,9 @@ class LogsPanel(QWidget):
         search_layout = QHBoxLayout()
         search_layout.addWidget(QLabel("Search:"))
         self._search_input = QLineEdit()
-        self._search_input.setPlaceholderText("Enter text to search in logs...")
-        self._search_input.textChanged.connect(self._filter_logs)
-        search_layout.addWidget(self._search_input)
+        self._search_input.setPlaceholderText("Enter text to search (case-insensitive)...")
+        self._search_input.textChanged.connect(self._on_search_changed)
+        search_layout.addWidget(self._search_input, 1)
 
         btn_clear_search = QPushButton("Clear")
         btn_clear_search.clicked.connect(self._clear_search)
@@ -72,7 +116,13 @@ class LogsPanel(QWidget):
 
         layout.addLayout(search_layout)
 
-        # Text display
+        # Progress bar (hidden by default)
+        self._progress = QProgressBar()
+        self._progress.setVisible(False)
+        self._progress.setMaximum(0)  # Indeterminate progress
+        layout.addWidget(self._progress)
+
+        # Text display with monospace font
         self._text_display = QTextEdit()
         self._text_display.setReadOnly(True)
         self._text_display.setStyleSheet(
@@ -82,34 +132,39 @@ class LogsPanel(QWidget):
 
         # Action buttons
         action_layout = QHBoxLayout()
-        btn_reload = QPushButton("Reload")
+        
+        btn_reload = QPushButton("🔄 Reload")
         btn_reload.clicked.connect(self._reload_logs)
         action_layout.addWidget(btn_reload)
 
-        btn_copy = QPushButton("Copy All")
+        btn_copy = QPushButton("📋 Copy All")
         btn_copy.clicked.connect(self._copy_logs)
         action_layout.addWidget(btn_copy)
+
+        self._status_label = QLabel("Ready")
+        self._status_label.setStyleSheet("font-size: 10px; color: #666;")
+        action_layout.addWidget(self._status_label)
 
         action_layout.addStretch()
         layout.addLayout(action_layout)
 
     def _browse_logs(self) -> None:
+        """Browse for a log file."""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Open Log File", "", "Log Files (*.log *.enc *.txt);;All Files (*)"
+            self, 
+            "Open Log File", 
+            str(Path.home() / ".keystroke_analytics"),
+            "Log Files (*.log *.enc *.txt);;All Files (*)"
         )
         if file_path:
-            self._current_log_file = Path(file_path)
-            self._file_path.setText(str(self._current_log_file))
-            self._load_log_file()
+            self._load_file_async(Path(file_path))
 
     def _open_log_directory(self) -> None:
+        """Open the log directory in file explorer."""
         log_dir = Path.home() / ".keystroke_analytics"
         if not log_dir.exists():
             QMessageBox.information(self, "No Logs", f"Log directory not found: {log_dir}")
             return
-
-        import subprocess
-        import sys
 
         try:
             if sys.platform == "win32":
@@ -120,37 +175,63 @@ class LogsPanel(QWidget):
                 subprocess.Popen(["xdg-open", str(log_dir)])
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to open directory: {e}")
+            logger.exception("Error opening directory: %s", e)
 
-    def _load_log_file(self) -> None:
-        if not self._current_log_file or not self._current_log_file.exists():
-            QMessageBox.warning(self, "Error", "Log file not found or not selected")
+    def _load_file_async(self, file_path: Path) -> None:
+        """Load a log file asynchronously."""
+        # Stop any existing loader
+        if self._loader_thread and self._loader_thread.isRunning():
+            self._loader_thread.quit()
+            self._loader_thread.wait()
+
+        self._current_log_file = file_path
+        self._file_path.setText(str(file_path))
+        self._progress.setVisible(True)
+        self._status_label.setText("Loading...")
+
+        # Create and start loader thread
+        self._loader_thread = LogFileLoader(file_path)
+        self._loader_thread.finished.connect(self._on_file_loaded)
+        self._loader_thread.error.connect(self._on_load_error)
+        self._loader_thread.start()
+
+    @Slot(str)
+    def _on_file_loaded(self, content: str) -> None:
+        """Called when file loading completes."""
+        self._full_content = content
+        self._progress.setVisible(False)
+        self._update_display()
+        self._status_label.setText(f"Loaded {len(content)} bytes")
+
+    @Slot(str)
+    def _on_load_error(self, error_msg: str) -> None:
+        """Called when file loading fails."""
+        self._progress.setVisible(False)
+        self._status_label.setText("Error loading file")
+        QMessageBox.critical(self, "Error", f"Failed to read log file:\n{error_msg}")
+        logger.exception("File load error: %s", error_msg)
+
+    def _on_search_changed(self) -> None:
+        """Called when search text changes (with minimal throttling)."""
+        self._update_display()
+
+    def _update_display(self) -> None:
+        """Update the text display based on current search term."""
+        if not self._full_content:
             return
 
-        try:
-            content = self._current_log_file.read_text(encoding="utf-8", errors="ignore")
-            self._text_display.setText(content)
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to read log file: {e}")
-            logger.exception("Error reading log file")
+        search_term = self._search_input.text().lower()
 
-    def _filter_logs(self) -> None:
-        if not self._current_log_file:
-            return
+        if search_term:
+            # Filter lines by search term
+            lines = self._full_content.split("\n")
+            filtered_lines = [line for line in lines if search_term in line.lower()]
+            display_text = f"[{len(filtered_lines)} matches found]\n\n" + "\n".join(filtered_lines)
+        else:
+            display_text = self._full_content
 
-        try:
-            content = self._current_log_file.read_text(encoding="utf-8", errors="ignore")
-            search_term = self._search_input.text().lower()
-
-            if search_term:
-                lines = content.split("\n")
-                filtered_lines = [line for line in lines if search_term in line.lower()]
-                display_text = f"[{len(filtered_lines)} matches found]\n\n" + "\n".join(filtered_lines)
-                self._text_display.setText(display_text)
-                self._highlight_matches(search_term)
-            else:
-                self._text_display.setText(content)
-        except Exception as e:
-            logger.exception("Error filtering logs")
+        self._text_display.setPlainText(display_text)
+        self._highlight_matches(search_term)
 
     def _highlight_matches(self, search_term: str) -> None:
         """Highlight all occurrences of search_term in the text display."""
@@ -169,26 +250,70 @@ class LogsPanel(QWidget):
                 cursor.movePosition(QTextCursor.Right)
 
     def _clear_search(self) -> None:
+        """Clear the search input and display full logs."""
         self._search_input.clear()
 
     def _reload_logs(self) -> None:
+        """Reload the current log file."""
         if self._current_log_file:
-            self._load_log_file()
+            self._load_file_async(self._current_log_file)
+        else:
+            QMessageBox.warning(self, "No File", "No log file loaded. Please browse to select one.")
 
     def _copy_logs(self) -> None:
+        """Copy logs to clipboard."""
         from PySide6.QtWidgets import QApplication
 
+        text = self._text_display.toPlainText()
+        if not text:
+            QMessageBox.warning(self, "Nothing to Copy", "No logs loaded.")
+            return
+
         clipboard = QApplication.clipboard()
-        clipboard.setText(self._text_display.toPlainText())
-        QMessageBox.information(self, "Success", "Logs copied to clipboard")
+        clipboard.setText(text)
+        self._status_label.setText(f"Copied {len(text)} bytes to clipboard")
 
     def set_log_directory(self, log_dir: Optional[Path]) -> None:
-        """Set the default log directory."""
-        if log_dir and log_dir.exists():
+        """
+        Set the default log directory and load the most recent log.
+        
+        Args:
+            log_dir: Path to log directory
+        """
+        if not log_dir or not log_dir.exists():
+            return
+
+        try:
+            # Find the most recent log file
             log_files = list(log_dir.glob("*.log")) + list(log_dir.glob("*.enc"))
             if log_files:
-                # Load the most recent log file
                 latest_log = max(log_files, key=lambda p: p.stat().st_mtime)
-                self._current_log_file = latest_log
-                self._file_path.setText(str(self._current_log_file))
-                self._load_log_file()
+                self._load_file_async(latest_log)
+        except Exception as e:
+            logger.exception("Error setting log directory: %s", e)
+
+    def enable_auto_refresh(self, interval_ms: int = 2000) -> None:
+        """
+        Enable auto-refresh of logs at regular intervals (useful during capture).
+        
+        Args:
+            interval_ms: Refresh interval in milliseconds
+        """
+        if not self._refresh_timer:
+            self._refresh_timer = QTimer()
+            self._refresh_timer.timeout.connect(self._reload_logs)
+        
+        self._refresh_timer.start(interval_ms)
+
+    def disable_auto_refresh(self) -> None:
+        """Disable auto-refresh."""
+        if self._refresh_timer:
+            self._refresh_timer.stop()
+
+    def closeEvent(self, event) -> None:
+        """Clean up before closing."""
+        self.disable_auto_refresh()
+        if self._loader_thread and self._loader_thread.isRunning():
+            self._loader_thread.quit()
+            self._loader_thread.wait()
+        super().closeEvent(event)
