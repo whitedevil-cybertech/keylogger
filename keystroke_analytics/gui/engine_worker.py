@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from PySide6.QtCore import QObject, QThread, Signal, QTimer, Slot, Qt
+from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from keystroke_analytics.config import AppConfig
 from keystroke_analytics.engine import AnalyticsEngine
@@ -58,23 +58,24 @@ class EngineWorker(QObject):
 
         This runs on the background worker thread; the engine.start() call
         will block, but does not block the GUI thread since this runs elsewhere.
+        
+        Stats are now emitted from within the engine's main loop, not via
+        a separate Qt timer (which wouldn't fire on a blocked event loop).
         """
         try:
             logger.debug("EngineWorker.run() starting on thread %s", QThread.currentThread())
 
-            # Create engine with provided config
-            self._engine = AnalyticsEngine(self._config)
+            # Create engine with stats callback
+            self._engine = AnalyticsEngine(self._config, on_stats=self._on_stats_callback)
             self._running = True
 
             # Emit started signal to notify GUI
             self.started.emit()
             logger.info("Engine worker started successfully")
 
-            # Set up stats timer to emit updates periodically
-            self._setup_stats_timer()
-
             # Start the engine (blocking call, but on worker thread)
-            logger.debug("Calling engine.start() - will block worker thread")
+            # Stats are now emitted from within engine.start() via callback
+            logger.debug("Calling engine.start() - will block worker thread but emit stats via callback")
             self._engine.start()
 
         except Exception as e:  # noqa: BLE001
@@ -84,8 +85,6 @@ class EngineWorker(QObject):
         finally:
             # Clean up
             self._running = False
-            if self._stats_timer:
-                self._stats_timer.stop()
             logger.debug("EngineWorker.run() completed")
             self.stopped.emit()
 
@@ -109,32 +108,17 @@ class EngineWorker(QObject):
             logger.exception("Error stopping engine: %s", e)
             self.error.emit(f"Stop error: {str(e)}")
 
-    def _setup_stats_timer(self) -> None:
-        """Set up a timer to emit stats periodically to the GUI."""
-        self._stats_timer = QTimer()
-        # Set timer to run on this (worker) thread
-        self._stats_timer.moveToThread(QThread.currentThread())
-        # Connect timeout signal to emit_stats slot
-        self._stats_timer.timeout.connect(self._emit_stats, Qt.DirectConnection)
-        self._stats_timer.start(500)  # Emit stats every 500ms
-        logger.debug("Stats timer started on worker thread: 500ms interval")
-
-    @Slot()
-    def _emit_stats(self) -> None:
+    def _on_stats_callback(self, stats: dict) -> None:
         """
-        Poll current stats from engine and emit via signal.
-
-        Called by stats timer; runs on worker thread.
-        Stats signal is received by main thread via queued connection.
+        Callback from engine when stats are available.
+        
+        Called from engine's main loop every ~500ms.
+        Emits stats via Qt signal (queued connection to main thread).
         """
-        if not self._running or not self._engine:
-            return
-
         try:
-            stats = self._engine.get_stats()
             if stats:
                 logger.debug(
-                    "Emitting stats: ks=%d wpm=%.1f dwell=%.1f flight=%.1f",
+                    "Stats callback received: ks=%d wpm=%.1f dwell=%.1f flight=%.1f",
                     stats.get("total_keystrokes", 0),
                     stats.get("wpm", 0),
                     stats.get("avg_dwell_ms", 0),
@@ -142,8 +126,7 @@ class EngineWorker(QObject):
                 )
                 self.stats_updated.emit(stats)
         except Exception as e:  # noqa: BLE001
-            logger.exception("Error getting stats: %s", e)
-            # Don't emit error here; this is just stats collection
+            logger.exception("Error in stats callback: %s", e)
 
 
 class EngineWorkerThread(QThread):

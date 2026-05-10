@@ -32,9 +32,11 @@ class AnalyticsEngine:
         engine.start()          # blocks until Ctrl-C
     """
 
-    def __init__(self, config: AppConfig) -> None:
+    def __init__(self, config: AppConfig, on_stats: callable | None = None) -> None:
         self._config = config
         self._running = Event()
+        self._on_stats = on_stats  # Callback for stats updates (called every ~500ms)
+        self._last_stats_time = 0  # Track time of last stats emission
 
         # -- Storage --------------------------------------------------
         if config.storage.encrypt and config.storage.passphrase:
@@ -80,6 +82,8 @@ class AnalyticsEngine:
 
     def start(self) -> None:
         """Start capture and block until interrupted."""
+        import time
+        
         self._running.set()
         self._print_banner()
         self._start_window_polling()
@@ -93,7 +97,23 @@ class AnalyticsEngine:
                 if dwell and self._biometrics:
                     self._biometrics.update_dwell(dwell[0], dwell[1])
 
-                self._running.wait(timeout=0.1)
+                # Emit stats every 500ms (instead of via separate timer)
+                current_time = time.time()
+                if self._on_stats and (current_time - self._last_stats_time) >= 0.5:
+                    stats = self.get_stats()
+                    if stats:
+                        try:
+                            self._on_stats(stats)
+                            logger.debug(
+                                "Stats emitted from engine: ks=%d wpm=%.1f",
+                                stats.get("total_keystrokes", 0),
+                                stats.get("wpm", 0),
+                            )
+                        except Exception as e:  # noqa: BLE001
+                            logger.exception("Error in stats callback: %s", e)
+                    self._last_stats_time = current_time
+
+                self._running.wait(timeout=0.05)  # Reduced to 50ms for more frequent checks
 
         except KeyboardInterrupt:
             pass
