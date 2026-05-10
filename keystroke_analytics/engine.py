@@ -8,7 +8,7 @@ titles) happens here.
 """
 
 import logging
-from threading import Event, Timer
+from threading import Event, Timer, Lock
 
 from keystroke_analytics.config import AppConfig
 from keystroke_analytics.models import InputEvent
@@ -54,6 +54,7 @@ class AnalyticsEngine:
 
         # -- Analytics ------------------------------------------------
         self._biometrics = TypingBiometrics() if config.analytics.enabled else None
+        self._stats_lock = Lock()  # Protect biometrics access from multiple threads
 
         # -- Delivery -------------------------------------------------
         self._webhook = WebhookSender(
@@ -130,30 +131,31 @@ class AnalyticsEngine:
         print("[*] Session ended.")
 
     def get_stats(self) -> dict:
-        """Get current session statistics for GUI display."""
+        """Get current session statistics for GUI display (thread-safe)."""
         if not self._biometrics:
             return {}
 
         try:
-            report = self._biometrics.report()
-            categories = report.category_distribution or {}
-            return {
-                "duration": report.duration_secs,
-                "total_keystrokes": report.total_keystrokes,
-                "wpm": report.words_per_minute,
-                "avg_dwell_ms": report.avg_dwell_ms,
-                "avg_flight_ms": report.avg_flight_ms,
-                "rhythm_score": report.rhythm_consistency,
-                "alpha_count": categories.get("alpha", 0),
-                "numeric_count": categories.get("numeric", 0),
-                "special_count": categories.get("punctuation", 0),
-                "whitespace_count": categories.get("whitespace", 0),
-                "function_count": categories.get("function", 0),
-                "top_keys": list(report.top_keys) if report.top_keys else [],
-                "top_key": report.top_keys[0][0] if report.top_keys else "N/A",
-                "status": "Recording" if self._running.is_set() else "Idle",
-                "elapsed_time": report.duration_secs,
-            }
+            with self._stats_lock:
+                report = self._biometrics.report()
+                categories = report.category_distribution or {}
+                return {
+                    "duration": report.duration_secs,
+                    "total_keystrokes": report.total_keystrokes,
+                    "wpm": report.words_per_minute,
+                    "avg_dwell_ms": report.avg_dwell_ms,
+                    "avg_flight_ms": report.avg_flight_ms,
+                    "rhythm_score": report.rhythm_consistency,
+                    "alpha_count": categories.get("alpha", 0),
+                    "numeric_count": categories.get("numeric", 0),
+                    "special_count": categories.get("punctuation", 0),
+                    "whitespace_count": categories.get("whitespace", 0),
+                    "function_count": categories.get("function", 0),
+                    "top_keys": list(report.top_keys) if report.top_keys else [],
+                    "top_key": report.top_keys[0][0] if report.top_keys else "N/A",
+                    "status": "Recording" if self._running.is_set() else "Idle",
+                    "elapsed_time": report.duration_secs,
+                }
         except Exception as e:
             logger.exception("Error getting stats: %s", e)
             return {}
@@ -163,7 +165,7 @@ class AnalyticsEngine:
     # ------------------------------------------------------------------
 
     def _on_keystroke(self, event: InputEvent) -> None:
-        """Called by KeyboardCapture for each key press."""
+        """Called by KeyboardCapture for each key press (from listener thread)."""
         # Attach current window title.
         event.window_title = self._current_window
 
@@ -174,9 +176,15 @@ class AnalyticsEngine:
         if self._enc_logger:
             self._enc_logger.write(line)
 
-        # Feed analytics.
+        # Feed analytics (with lock protection).
         if self._biometrics:
-            self._biometrics.record_event(event)
+            with self._stats_lock:
+                self._biometrics.record_event(event)
+                logger.debug(
+                    "Keystroke recorded: key=%s press_time=%s",
+                    event.key,
+                    event.timestamp,
+                )
 
         # Buffer for webhook.
         self._webhook.add_event(event)

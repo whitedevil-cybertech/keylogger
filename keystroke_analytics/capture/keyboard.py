@@ -94,6 +94,10 @@ class KeyboardCapture:
         # Flight-time tracking: timestamp of last key-press.
         self._last_press_time: float | None = None
 
+        # Last dwell measurement (key, dwell_ms) - protected by lock
+        self._last_dwell: tuple[str, float] | None = None
+        self._dwell_lock = Lock()
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -189,12 +193,14 @@ class KeyboardCapture:
 
         if press_time is not None:
             dwell_ms = (now_mono - press_time) * 1000.0
-            # Store in a lightweight way for the engine to pick up.
-            self._last_dwell = (label, dwell_ms)
+            # Store dwell measurement with lock protection
+            with self._dwell_lock:
+                self._last_dwell = (label, dwell_ms)
 
     @property
     def last_dwell(self) -> tuple[str, float] | None:
         """Return and clear the most recent (key, dwell_ms) pair."""
-        val = getattr(self, "_last_dwell", None)
-        self._last_dwell = None
+        with self._dwell_lock:
+            val = self._last_dwell
+            self._last_dwell = None
         return val

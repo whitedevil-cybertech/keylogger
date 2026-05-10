@@ -154,10 +154,10 @@ class MainWindow(QMainWindow):
         self._btn_stop.setToolTip("Stop capture and generate final report")
         self._btn_choose_log.setToolTip("Select custom log directory")
 
-        # Auto-refresh timer
+        # Auto-refresh timer (for manual refresh if needed, not for polling stats)
         self._refresh_timer = QTimer()
         self._refresh_timer.timeout.connect(self._refresh_panels)
-        self._refresh_timer.setInterval(2000)  # 2s for smoother perf
+        self._refresh_timer.setInterval(2000)  # 2s for manual refresh
 
     def _create_capture_tab(self) -> QWidget:
         """Create the main capture control tab."""
@@ -268,7 +268,6 @@ class MainWindow(QMainWindow):
             passphrase=passphrase,
         )
         self._controller.start(overrides)
-        self._refresh_timer.start(1000)  # Update every second
 
     def _stop_clicked(self) -> None:
         self._controller.stop()
@@ -284,9 +283,6 @@ class MainWindow(QMainWindow):
         
         # Enable auto-refresh of logs during capture
         self._logs_panel.enable_auto_refresh(interval_ms=2000)
-        
-        # Start stats polling timer
-        self._refresh_timer.start(500)  # Update stats every 500ms for smooth display
 
     def _on_stopped(self) -> None:
         """Called when capture stops."""
@@ -323,6 +319,11 @@ class MainWindow(QMainWindow):
             return
         
         try:
+            logger.debug(
+                "UI stats update received: ks=%d wpm=%.1f",
+                stats.get("total_keystrokes", 0),
+                stats.get("wpm", 0),
+            )
             self._stats_panel.update_stats(stats)
             if self._report_panel:
                 self._report_panel.update_report(stats)
@@ -331,17 +332,13 @@ class MainWindow(QMainWindow):
 
     def _refresh_panels(self) -> None:
         """
-        Periodic refresh of stats during capture.
-        
-        Called by _refresh_timer to poll engine for latest stats.
+        Periodic refresh of UI during capture.
+
+        Since stats are now emitted via signals from the worker thread,
+        this mainly handles log panel refresh and is optional.
         """
-        if self._controller.running:
-            try:
-                stats = self._controller.get_current_stats()
-                if stats:
-                    self._on_stats_updated(stats)
-            except Exception as e:
-                logger.exception("Error refreshing stats: %s", e)
+        # Manual log refresh if needed
+        pass
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """Clean up before closing window."""
