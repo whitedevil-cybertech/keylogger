@@ -111,7 +111,7 @@ class AnalyticsEngine:
                             )
                         except Exception as e:  # noqa: BLE001
                             logger.exception("Error in stats callback: %s", e)
-                    self._last_stats_time = current_time
+                        self._last_stats_time = current_time
 
                 self._running.wait(timeout=0.05)  # Reduced to 50ms for more frequent checks
 
