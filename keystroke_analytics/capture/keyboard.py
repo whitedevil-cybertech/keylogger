@@ -137,15 +137,40 @@ class KeyboardCapture:
             # Unmapped special key — use its name.
             return f"[{key.name.upper()}]", KeyCategory.UNKNOWN
 
-        if hasattr(key, "char") and key.char:
-            return key.char, classify_char(key.char)
+        char = getattr(key, "char", None)
+        if char:
+            return char, classify_char(char)
 
-        return None  # unresolvable virtual key
+        vk = getattr(key, "vk", None)
+        if isinstance(vk, int) and 32 <= vk <= 126:
+            fallback_char = chr(vk)
+            if fallback_char == " ":
+                return "[SPACE]", KeyCategory.WHITESPACE
+            return fallback_char, classify_char(fallback_char)
+
+        key_str = str(key)
+        if key_str.startswith("'") and key_str.endswith("'") and len(key_str) >= 3:
+            fallback_char = key_str[1:-1]
+            if fallback_char:
+                return fallback_char, classify_char(fallback_char)
+
+        if key_str:
+            normalized = key_str.upper().replace("KEYCODE(", "").replace(")", "")
+            return f"[{normalized}]", KeyCategory.UNKNOWN
+
+        return None
 
     def _handle_press(self, key: Key | KeyCode) -> None:
         """Record press timestamp and emit an InputEvent."""
+        logger.debug(
+            "Raw key event (press): key=%r key.char=%r key.type=%s",
+            key,
+            getattr(key, "char", None),
+            type(key).__name__,
+        )
         resolved = self._resolve_key(key)
         if resolved is None:
+            logger.debug("Dropping unresolvable key press event: %r", key)
             return
 
         label, category = resolved
@@ -177,12 +202,20 @@ class KeyboardCapture:
             flight_ms=flight_ms,
             # dwell_ms is filled in on release via the engine.
         )
+        logger.debug("Emitting normalized key event: label=%s category=%s", label, category.name)
         self._on_event(event)
 
     def _handle_release(self, key: Key | KeyCode) -> None:
         """Calculate dwell time on key release."""
+        logger.debug(
+            "Raw key event (release): key=%r key.char=%r key.type=%s",
+            key,
+            getattr(key, "char", None),
+            type(key).__name__,
+        )
         resolved = self._resolve_key(key)
         if resolved is None:
+            logger.debug("Dropping unresolvable key release event: %r", key)
             return
 
         label, _ = resolved
@@ -196,6 +229,7 @@ class KeyboardCapture:
             # Store dwell measurement with lock protection
             with self._dwell_lock:
                 self._last_dwell = (label, dwell_ms)
+            logger.debug("Computed dwell time: key=%s dwell_ms=%.1f", label, dwell_ms)
 
     @property
     def last_dwell(self) -> tuple[str, float] | None:
