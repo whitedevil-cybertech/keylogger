@@ -17,7 +17,6 @@ Signals flow back to GUI via Qt queued connections (thread-safe).
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from PySide6.QtCore import QObject, QThread, Signal, Slot
 
@@ -47,9 +46,8 @@ class EngineWorker(QObject):
     def __init__(self, config: AppConfig) -> None:
         super().__init__()
         self._config = config
-        self._engine: Optional[AnalyticsEngine] = None
+        self._engine: AnalyticsEngine | None = None
         self._running = False
-        self._stats_timer: Optional[QTimer] = None
 
     @Slot()
     def run(self) -> None:
@@ -58,7 +56,7 @@ class EngineWorker(QObject):
 
         This runs on the background worker thread; the engine.start() call
         will block, but does not block the GUI thread since this runs elsewhere.
-        
+
         Stats are now emitted from within the engine's main loop, not via
         a separate Qt timer (which wouldn't fire on a blocked event loop).
         """
@@ -111,7 +109,7 @@ class EngineWorker(QObject):
     def _on_stats_callback(self, stats: dict) -> None:
         """
         Callback from engine when stats are available.
-        
+
         Called from engine's main loop every ~500ms.
         Emits stats via Qt signal (queued connection to main thread).
         """
@@ -155,7 +153,7 @@ class EngineWorkerThread(QThread):
     def __init__(self, config: AppConfig) -> None:
         super().__init__()
         self._config = config
-        self._worker: Optional[EngineWorker] = None
+        self._worker: EngineWorker | None = None
 
     def run(self) -> None:
         """Run the worker on this thread."""
