@@ -6,6 +6,7 @@ Supports async loading of large files and background refresh during active captu
 
 from __future__ import annotations
 
+import itertools
 import logging
 import subprocess
 import sys
@@ -263,7 +264,7 @@ class LogsPanel(QWidget):
         )
         if search_dir and search_dir.exists():
             try:
-                log_files = list(search_dir.glob("*.log")) + list(search_dir.glob("*.enc"))
+                log_files = list(itertools.chain(search_dir.glob("*.log"), search_dir.glob("*.enc")))
                 if log_files:
                     latest = max(log_files, key=lambda p: p.stat().st_mtime)
                     if latest != self._current_log_file:
@@ -275,7 +276,11 @@ class LogsPanel(QWidget):
         if self._current_log_file:
             self._load_file_async(self._current_log_file)
         else:
-            logger.debug("Auto-refresh: no log file available yet")
+            logger.debug(
+                "Auto-refresh: no log file available (current_log_file=%s, log_dir=%s)",
+                self._current_log_file,
+                self._log_dir,
+            )
 
     def _copy_logs(self) -> None:
         """Copy logs to clipboard."""
@@ -304,7 +309,7 @@ class LogsPanel(QWidget):
 
         try:
             # Find the most recent log file
-            log_files = list(log_dir.glob("*.log")) + list(log_dir.glob("*.enc"))
+            log_files = list(itertools.chain(log_dir.glob("*.log"), log_dir.glob("*.enc")))
             if log_files:
                 latest_log = max(log_files, key=lambda p: p.stat().st_mtime)
                 self._load_file_async(latest_log)
