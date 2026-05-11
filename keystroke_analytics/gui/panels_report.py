@@ -242,7 +242,7 @@ class ReportPanel(QWidget):
         top_ten = top_keys[:10]
         max_count = max((count for _, count in top_ten), default=1)
         for i, (key, count) in enumerate(top_ten, 1):
-            bar_length = int((count / max_count) * 30) if max_count else 0
+            bar_length = int((count / max_count) * 30)
             bar = "█" * bar_length
             summary += f"  {i:2d}. {str(key):15s} : {int(count):5d}  {bar}\n"
 
