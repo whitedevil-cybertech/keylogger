@@ -35,6 +35,7 @@ class ReportPanel(QWidget):
         super().__init__()
         self._session_stats = None
         self._init_ui()
+        self._update_summary_text()
 
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -172,8 +173,11 @@ class ReportPanel(QWidget):
         self._summary_text.setText(summary)
 
     def _refresh_report(self) -> None:
-        """Refresh the report (placeholder)."""
-        QMessageBox.information(self, "Info", "Report will auto-update during active capture")
+        """Refresh the report using current session stats, if available."""
+        if self._session_stats:
+            self.update_report(self._session_stats)
+            return
+        QMessageBox.information(self, "Info", "No session data yet. Start capture to view analytics.")
 
     def _export_report(self) -> None:
         """Export the report to a file."""
@@ -184,7 +188,7 @@ class ReportPanel(QWidget):
         )
         if file_path:
             try:
-                with open(file_path, "w") as f:
+                with open(file_path, "w", encoding="utf-8") as f:
                     f.write(self._summary_text.toPlainText())
                 QMessageBox.information(self, "Success", f"Report exported to:\n{file_path}")
             except Exception as e:
@@ -235,10 +239,12 @@ class ReportPanel(QWidget):
 
 """
         top_keys = session_stats.get("top_keys", [])
-        for i, (key, count) in enumerate(top_keys[:10], 1):
-            bar_length = int(count / max([c for _, c in top_keys[:10]], 1) * 30)
+        top_ten = top_keys[:10]
+        max_count = max((count for _, count in top_ten), default=1)
+        for i, (key, count) in enumerate(top_ten, 1):
+            bar_length = int((count / max_count) * 30) if max_count else 0
             bar = "█" * bar_length
-            summary += f"  {i:2d}. {key:15s} : {count:5d}  {bar}\n"
+            summary += f"  {i:2d}. {str(key):15s} : {int(count):5d}  {bar}\n"
 
         summary += "\nℹ️  Report generated during active capture session."
 
@@ -281,6 +287,6 @@ CALCULATION NOTES
         # Update top keys tab
         topkeys_text = "TOP KEYS BY FREQUENCY\n" + "=" * 50 + "\n\n"
         for i, (key, count) in enumerate(top_keys, 1):
-            topkeys_text += f"{i:2d}. {key:20s} {count:6d} times\n"
+            topkeys_text += f"{i:2d}. {str(key):20s} {int(count):6d} times\n"
 
         self._topkeys_text.setText(topkeys_text)
