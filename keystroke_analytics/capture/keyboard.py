@@ -7,16 +7,16 @@ flight time (gap between consecutive presses).  Each captured press is
 emitted as an ``InputEvent`` through a caller-supplied callback.
 """
 
-import time
 import logging
-from typing import Callable
+import time
+from collections.abc import Callable
+from datetime import datetime
 from threading import Lock
 
 from pynput import keyboard
 from pynput.keyboard import Key, KeyCode
 
 from keystroke_analytics.models import InputEvent, KeyCategory
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
