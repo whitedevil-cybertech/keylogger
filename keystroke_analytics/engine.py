@@ -8,16 +8,17 @@ titles) happens here.
 """
 
 import logging
-from threading import Event, Timer, Lock
+from collections.abc import Callable
+from threading import Event, Lock, Timer
 
-from keystroke_analytics.config import AppConfig
-from keystroke_analytics.models import InputEvent
+from keystroke_analytics.analytics.biometrics import TypingBiometrics
 from keystroke_analytics.capture.keyboard import KeyboardCapture
 from keystroke_analytics.capture.window import ActiveWindowDetector
-from keystroke_analytics.storage.rotation import RotatingFileWriter
-from keystroke_analytics.storage.encrypted_logger import EncryptedLogger
-from keystroke_analytics.analytics.biometrics import TypingBiometrics
+from keystroke_analytics.config import AppConfig
 from keystroke_analytics.delivery.webhook import WebhookSender
+from keystroke_analytics.models import InputEvent
+from keystroke_analytics.storage.encrypted_logger import EncryptedLogger
+from keystroke_analytics.storage.rotation import RotatingFileWriter
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +33,11 @@ class AnalyticsEngine:
         engine.start()          # blocks until Ctrl-C
     """
 
-    def __init__(self, config: AppConfig, on_stats: callable | None = None) -> None:
+    def __init__(self, config: AppConfig, on_stats: Callable[..., None] | None = None) -> None:
         self._config = config
         self._running = Event()
         self._on_stats = on_stats  # Callback for stats updates (called every ~500ms)
-        self._last_stats_time = 0  # Track time of last stats emission
+        self._last_stats_time: float = 0.0  # Track time of last stats emission
 
         # -- Storage --------------------------------------------------
         if config.storage.encrypt and config.storage.passphrase:
@@ -83,7 +84,7 @@ class AnalyticsEngine:
     def start(self) -> None:
         """Start capture and block until interrupted."""
         import time
-        
+
         self._running.set()
         self._print_banner()
         self._start_window_polling()
@@ -100,6 +101,7 @@ class AnalyticsEngine:
                 # Emit stats every 500ms (instead of via separate timer)
                 current_time = time.time()
                 if self._on_stats and (current_time - self._last_stats_time) >= 0.5:
+                    self._last_stats_time = current_time
                     stats = self.get_stats()
                     if stats:
                         try:
@@ -111,7 +113,6 @@ class AnalyticsEngine:
                             )
                         except Exception as e:  # noqa: BLE001
                             logger.exception("Error in stats callback: %s", e)
-                        self._last_stats_time = current_time
 
                 self._running.wait(timeout=0.05)  # Reduced to 50ms for more frequent checks
 
@@ -202,7 +203,7 @@ class AnalyticsEngine:
                 self._biometrics.record_event(event)
                 logger.debug(
                     "Keystroke recorded: key=%s press_time=%s",
-                    event.key,
+                    event.key_label,
                     event.timestamp,
                 )
 
