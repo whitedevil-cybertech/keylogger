@@ -133,7 +133,7 @@ class ReportPanel(QWidget):
         self._metrics_text.setPlainText("Detailed metrics will appear during capture.")
         self._topkeys_text.setPlainText("Top key frequency list will appear during capture.")
 
-    def _normalize_top_keys(self, raw_top_keys: object) -> list[tuple[str, int]]:
+    def _normalize_top_keys(self, raw_top_keys: list[object] | None) -> list[tuple[str, int]]:
         """Normalize top-key records from live stats into display-safe tuples."""
         normalized: list[tuple[str, int]] = []
         if not isinstance(raw_top_keys, list):
@@ -212,9 +212,6 @@ class ReportPanel(QWidget):
         numeric = int(session_stats.get("numeric_count", 0))
         special = int(session_stats.get("special_count", 0))
         whitespace = int(session_stats.get("whitespace_count", 0))
-        # Function/control count is shown in detailed metrics, while distribution bars intentionally
-        # reflect only the four visible categories so percentages align with what is displayed.
-        function_count = int(session_stats.get("function_count", 0))
         distribution_total = max(alpha + numeric + special + whitespace, 1)
 
         distribution_map = {
@@ -270,7 +267,7 @@ class ReportPanel(QWidget):
             f"Numeric: {numeric}\n"
             f"Special/Punctuation: {special}\n"
             f"Whitespace: {whitespace}\n"
-            f"Function/Control: {function_count}\n"
+            f"Function/Control: {int(session_stats.get('function_count', 0))}\n"
         )
         self._metrics_text.setPlainText(metrics_text)
 
