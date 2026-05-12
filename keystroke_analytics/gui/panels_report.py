@@ -128,6 +128,16 @@ class ReportPanel(QWidget):
         self._metrics_text.setPlainText("Detailed metrics will appear during capture.")
         self._topkeys_text.setPlainText("Top key frequency list will appear during capture.")
 
+    def _normalize_top_keys(self, raw_top_keys: object) -> list[tuple[str, int]]:
+        """Normalize top-key records from live stats into display-safe tuples."""
+        normalized: list[tuple[str, int]] = []
+        if not isinstance(raw_top_keys, list):
+            return normalized
+        for item in raw_top_keys:
+            if isinstance(item, (tuple, list)) and len(item) >= 2:
+                normalized.append((str(item[0]), int(item[1])))
+        return normalized
+
     def _refresh_report(self) -> None:
         if self._session_stats:
             self.update_report(self._session_stats)
@@ -186,6 +196,7 @@ class ReportPanel(QWidget):
         numeric = int(session_stats.get("numeric_count", 0))
         special = int(session_stats.get("special_count", 0))
         whitespace = int(session_stats.get("whitespace_count", 0))
+        # Included in detailed metrics text below; distribution bars intentionally show 4 categories.
         function_count = int(session_stats.get("function_count", 0))
         # Keep percentages aligned to the four visible distribution bars.
         distribution_total = max(alpha + numeric + special + whitespace, 1)
@@ -201,11 +212,7 @@ class ReportPanel(QWidget):
             label.setText(f"{key.title()}: {count}")
             bar.setValue(int((count / distribution_total) * 100))
 
-        top_keys_raw = session_stats.get("top_keys", [])
-        top_keys: list[tuple[str, int]] = []
-        for item in top_keys_raw:
-            if isinstance(item, (tuple, list)) and len(item) >= 2:
-                top_keys.append((str(item[0]), int(item[1])))
+        top_keys = self._normalize_top_keys(session_stats.get("top_keys", []))
 
         summary_lines = [
             "SESSION OVERVIEW",
