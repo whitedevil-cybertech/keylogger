@@ -107,7 +107,7 @@ class EngineController(QObject):
                     self._worker_thread.error.disconnect(self._on_worker_error)
                     self._worker_thread.stats_updated.disconnect(self._on_stats_updated)
                 except RuntimeError:
-                    pass  # Already disconnected or thread already gone
+                    logger.debug("Stale thread signal disconnect skipped (already disconnected)")
 
             # Create and configure worker thread
             self._worker_thread = EngineWorkerThread(config)
