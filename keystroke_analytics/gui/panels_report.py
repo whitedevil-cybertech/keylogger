@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 from .widgets import ICONS, CustomButton, MetricCard
 
 logger = logging.getLogger(__name__)
-_DISTRIBUTION_LABEL_MIN_WIDTH = 104
+_DISTRIBUTION_LABEL_MIN_WIDTH = 120
 
 
 class ReportPanel(QWidget):
@@ -187,6 +187,7 @@ class ReportPanel(QWidget):
         special = int(session_stats.get("special_count", 0))
         whitespace = int(session_stats.get("whitespace_count", 0))
         function_count = int(session_stats.get("function_count", 0))
+        # Keep percentages aligned to the four visible distribution bars.
         distribution_total = max(alpha + numeric + special + whitespace, 1)
 
         distribution_map = {
