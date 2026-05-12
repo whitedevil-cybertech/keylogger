@@ -24,6 +24,11 @@ from .widgets import ICONS, CustomButton, MetricCard
 
 logger = logging.getLogger(__name__)
 _DISTRIBUTION_LABEL_MIN_WIDTH = 120
+_EXPORT_SECTIONS = (
+    ("SUMMARY", "_summary_text"),
+    ("DETAILED METRICS", "_metrics_text"),
+    ("TOP KEYS", "_topkeys_text"),
+)
 
 
 class ReportPanel(QWidget):
@@ -136,13 +141,14 @@ class ReportPanel(QWidget):
         for item in raw_top_keys:
             if isinstance(item, (tuple, list)) and len(item) >= 2:
                 normalized.append((str(item[0]), int(item[1])))
+            else:
+                logger.debug("Skipping malformed top_keys entry: %r", item)
         return normalized
 
     def _compose_export_text(self) -> str:
         sections = (
-            ("SUMMARY", self._summary_text.toPlainText()),
-            ("DETAILED METRICS", self._metrics_text.toPlainText()),
-            ("TOP KEYS", self._topkeys_text.toPlainText()),
+            (title, getattr(self, widget_attr).toPlainText())
+            for title, widget_attr in _EXPORT_SECTIONS
         )
         return "\n\n".join(
             f"{title}\n{'=' * len(title)}\n{content}".rstrip() for title, content in sections
@@ -206,9 +212,9 @@ class ReportPanel(QWidget):
         numeric = int(session_stats.get("numeric_count", 0))
         special = int(session_stats.get("special_count", 0))
         whitespace = int(session_stats.get("whitespace_count", 0))
-        # Included in detailed metrics text; distribution bars intentionally show only 4 categories.
+        # Function/control count is shown in detailed metrics, while distribution bars intentionally
+        # reflect only the four visible categories so percentages align with what is displayed.
         function_count = int(session_stats.get("function_count", 0))
-        # Keep percentages aligned to the four visible distribution bars.
         distribution_total = max(alpha + numeric + special + whitespace, 1)
 
         distribution_map = {
