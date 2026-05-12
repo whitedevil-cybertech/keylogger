@@ -73,15 +73,15 @@ class ConsentDialog(QDialog):
             button-spacing: 8px;
         }}
         QPushButton {{
-            background-color: {Theme.COLORS['bg_accent']};
-            color: #000000;
+            background-color: {Theme.COLORS['accent_soft']};
+            color: #ffffff;
             border: none;
             border-radius: 4px;
             padding: 8px 16px;
             font-weight: bold;
         }}
         QPushButton:hover {{
-            background-color: #00e5bb;
+            background-color: {Theme.COLORS['accent']};
         }}
         """
         self.setStyleSheet(style)
@@ -131,15 +131,15 @@ class PassphraseDialog(QDialog):
             font-size: 11pt;
         }}
         QLineEdit {{
-            background-color: {Theme.COLORS['bg_secondary']};
+            background-color: {Theme.COLORS['bg_input']};
             color: {Theme.COLORS['text_primary']};
             border: 1px solid {Theme.COLORS['border']};
             border-radius: 4px;
             padding: 8px;
-            selection-background-color: {Theme.COLORS['bg_accent']};
+            selection-background-color: {Theme.COLORS['accent_soft']};
         }}
         QLineEdit:focus {{
-            border: 1px solid {Theme.COLORS['bg_accent']};
+            border: 1px solid {Theme.COLORS['accent']};
         }}
         QLineEdit::placeholder {{
             color: {Theme.COLORS['text_muted']};
@@ -148,15 +148,15 @@ class PassphraseDialog(QDialog):
             button-spacing: 8px;
         }}
         QPushButton {{
-            background-color: {Theme.COLORS['bg_accent']};
-            color: #000000;
+            background-color: {Theme.COLORS['accent_soft']};
+            color: #ffffff;
             border: none;
             border-radius: 4px;
             padding: 8px 16px;
             font-weight: bold;
         }}
         QPushButton:hover {{
-            background-color: #00e5bb;
+            background-color: {Theme.COLORS['accent']};
         }}
         """
         self.setStyleSheet(style)

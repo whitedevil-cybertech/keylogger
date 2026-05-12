@@ -38,6 +38,7 @@ class AnalyticsEngine:
         self._running = Event()
         self._on_stats = on_stats  # Callback for stats updates (called every ~500ms)
         self._last_stats_time: float = 0.0  # Track time of last stats emission
+        self._stopped = False  # Guard against double stop()
 
         # -- Storage --------------------------------------------------
         if config.storage.encrypt and config.storage.passphrase:
@@ -123,6 +124,10 @@ class AnalyticsEngine:
 
     def stop(self) -> None:
         """Gracefully shut down all subsystems."""
+        if self._stopped:
+            logger.debug("Engine already stopped; skipping duplicate stop() call")
+            return
+        self._stopped = True
         print("\n[*] Shutting down...")
         self._running.clear()
 
