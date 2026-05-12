@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from PySide6.QtCore import Slot
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -30,77 +31,45 @@ class ReportPanel(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._session_stats: dict | None = None
+        self._progress_bars: dict[str, tuple[QLabel, QProgressBar]] = {}
         self._init_ui()
-        self._update_summary_text()
+        self._set_placeholder_text()
 
     def _init_ui(self) -> None:
-        layout = QVBoxLayout(self)
-        layout.setSpacing(10)
-        layout.setContentsMargins(12, 12, 12, 12)
+        main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(12, 12, 12, 12)
 
         title = QLabel("Analytics")
         title.setProperty("role", "title")
-        layout.addWidget(title)
+        main_layout.addWidget(title)
 
-        self._hero_frame = QFrame()
-        self._hero_frame.setProperty("role", "card")
-        hero_layout = QGridLayout(self._hero_frame)
-        hero_layout.setContentsMargins(10, 10, 10, 10)
-        hero_layout.setSpacing(8)
+        cards_frame = QFrame()
+        cards_frame.setProperty("role", "card")
+        cards_layout = QGridLayout(cards_frame)
+        cards_layout.setContentsMargins(10, 10, 10, 10)
+        cards_layout.setSpacing(8)
 
         self._wpm_card = MetricCard(ICONS.get("speed", "⚡"), "0.0", "Words per Minute", "#19c7c0")
         self._rhythm_card = MetricCard(ICONS.get("rhythm", "◍"), "0.00", "Rhythm Score", "#60a5fa")
         self._keystrokes_card = MetricCard(ICONS.get("key", "⌨"), "0", "Total Keystrokes", "#34d399")
 
-        hero_layout.addWidget(self._wpm_card, 0, 0)
-        hero_layout.addWidget(self._rhythm_card, 0, 1)
-        hero_layout.addWidget(self._keystrokes_card, 0, 2)
-        layout.addWidget(self._hero_frame)
+        cards_layout.addWidget(self._wpm_card, 0, 0)
+        cards_layout.addWidget(self._rhythm_card, 0, 1)
+        cards_layout.addWidget(self._keystrokes_card, 0, 2)
+        main_layout.addWidget(cards_frame)
 
-        distribution_frame = QFrame()
-        distribution_frame.setProperty("role", "card")
-        distribution_layout = QVBoxLayout(distribution_frame)
-        distribution_layout.setContentsMargins(10, 10, 10, 10)
-        distribution_layout.setSpacing(8)
-
-        distribution_title = QLabel("Key Distribution")
-        distribution_title.setProperty("role", "subtitle")
-        distribution_layout.addWidget(distribution_title)
-
-        self._progress_bars: dict[str, tuple[QLabel, QProgressBar]] = {}
-        for category in ("Alpha", "Numeric", "Special", "Whitespace"):
-            row = QHBoxLayout()
-            row.setSpacing(8)
-            label = QLabel(f"{category}: 0")
-            label.setMinimumWidth(120)
-            bar = QProgressBar()
-            bar.setRange(0, 100)
-            bar.setValue(0)
-            bar.setTextVisible(True)
-            bar.setFormat("%p%")
-            row.addWidget(label)
-            row.addWidget(bar, 1)
-            distribution_layout.addLayout(row)
-            self._progress_bars[category.lower()] = (label, bar)
-
-        layout.addWidget(distribution_frame)
+        main_layout.addWidget(self._build_distribution_frame())
 
         self._report_tabs = QTabWidget()
         self._report_tabs.setDocumentMode(True)
-
-        self._summary_text = QTextEdit()
-        self._summary_text.setReadOnly(True)
+        self._summary_text = self._create_report_text()
+        self._metrics_text = self._create_report_text()
+        self._topkeys_text = self._create_report_text()
         self._report_tabs.addTab(self._summary_text, "Summary")
-
-        self._metrics_text = QTextEdit()
-        self._metrics_text.setReadOnly(True)
         self._report_tabs.addTab(self._metrics_text, "Detailed Metrics")
-
-        self._topkeys_text = QTextEdit()
-        self._topkeys_text.setReadOnly(True)
         self._report_tabs.addTab(self._topkeys_text, "Top Keys")
-
-        layout.addWidget(self._report_tabs, 1)
+        main_layout.addWidget(self._report_tabs, 1)
 
         action_layout = QHBoxLayout()
         action_layout.addStretch()
@@ -112,9 +81,45 @@ class ReportPanel(QWidget):
         self._btn_export = CustomButton("Export Report")
         self._btn_export.clicked.connect(self._export_report)
         action_layout.addWidget(self._btn_export)
-        layout.addLayout(action_layout)
+        main_layout.addLayout(action_layout)
 
-    def _update_summary_text(self) -> None:
+    def _build_distribution_frame(self) -> QFrame:
+        frame = QFrame()
+        frame.setProperty("role", "card")
+
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+
+        title = QLabel("Key Distribution")
+        title.setProperty("role", "subtitle")
+        layout.addWidget(title)
+
+        for category in ("Alpha", "Numeric", "Special", "Whitespace"):
+            row = QHBoxLayout()
+            row.setSpacing(8)
+
+            label = QLabel(f"{category}: 0")
+            label.setMinimumWidth(104)
+            bar = QProgressBar()
+            bar.setRange(0, 100)
+            bar.setValue(0)
+            bar.setTextVisible(True)
+            bar.setFormat("%p%")
+
+            row.addWidget(label)
+            row.addWidget(bar, 1)
+            layout.addLayout(row)
+            self._progress_bars[category.lower()] = (label, bar)
+
+        return frame
+
+    def _create_report_text(self) -> QTextEdit:
+        text = QTextEdit()
+        text.setReadOnly(True)
+        return text
+
+    def _set_placeholder_text(self) -> None:
         self._summary_text.setPlainText(
             "No active session.\n\n"
             "Start a capture session to view analytics summaries, distribution, and top keys."
@@ -123,15 +128,14 @@ class ReportPanel(QWidget):
         self._topkeys_text.setPlainText("Top key frequency list will appear during capture.")
 
     def _refresh_report(self) -> None:
-<<<<<<<<< Temporary merge branch 1
-        """Refresh the report using current session stats, if available."""
         if self._session_stats:
             self.update_report(self._session_stats)
             return
-        QMessageBox.information(self, "Info", "No session data yet. Start capture to view analytics.")
-=========
-        QMessageBox.information(self, "Info", "Report auto-updates during active capture.")
->>>>>>>>> Temporary merge branch 2
+        QMessageBox.information(
+            self,
+            "Info",
+            "No session data yet. Report auto-updates during active capture.",
+        )
 
     def _export_report(self) -> None:
         file_path, _ = QFileDialog.getSaveFileName(
@@ -140,28 +144,29 @@ class ReportPanel(QWidget):
             "",
             "Text Files (*.txt);;All Files (*)",
         )
-        if file_path:
-            try:
-<<<<<<<<< Temporary merge branch 1
-=========
-                if Path(file_path).exists():
-                    overwrite = QMessageBox.question(
-                        self,
-                        "Overwrite File?",
-                        f"The file already exists:\n{file_path}\n\nDo you want to overwrite it?",
-                        QMessageBox.Yes | QMessageBox.No,
-                        QMessageBox.No,
-                    )
-                    if overwrite != QMessageBox.Yes:
-                        return
->>>>>>>>> Temporary merge branch 2
-                with open(file_path, "w", encoding="utf-8") as f:
-                    f.write(self._summary_text.toPlainText())
-                QMessageBox.information(self, "Success", f"Report exported to:\n{file_path}")
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to export report: {e}")
-                logger.exception("Error exporting report")
+        if not file_path:
+            return
 
+        try:
+            if Path(file_path).exists():
+                overwrite = QMessageBox.question(
+                    self,
+                    "Overwrite File?",
+                    f"The file already exists:\n{file_path}\n\nDo you want to overwrite it?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
+                )
+                if overwrite != QMessageBox.Yes:
+                    return
+
+            with open(file_path, "w", encoding="utf-8") as file_handle:
+                file_handle.write(self._summary_text.toPlainText())
+            QMessageBox.information(self, "Success", f"Report exported to:\n{file_path}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Error", f"Failed to export report: {exc}")
+            logger.exception("Error exporting report")
+
+    @Slot(dict)
     def update_report(self, session_stats: dict) -> None:
         self._session_stats = session_stats
 
@@ -180,6 +185,7 @@ class ReportPanel(QWidget):
         numeric = int(session_stats.get("numeric_count", 0))
         special = int(session_stats.get("special_count", 0))
         whitespace = int(session_stats.get("whitespace_count", 0))
+        function_count = int(session_stats.get("function_count", 0))
         distribution_total = max(alpha + numeric + special + whitespace, 1)
 
         distribution_map = {
@@ -190,20 +196,14 @@ class ReportPanel(QWidget):
         }
         for key, count in distribution_map.items():
             label, bar = self._progress_bars[key]
-            pct = int((count / distribution_total) * 100)
             label.setText(f"{key.title()}: {count}")
-            bar.setValue(pct)
+            bar.setValue(int((count / distribution_total) * 100))
 
-        top_keys = session_stats.get("top_keys", [])
-<<<<<<<<< Temporary merge branch 1
-        top_ten = top_keys[:10]
-        max_count = max((count for _, count in top_ten), default=1)
-        for i, (key, count) in enumerate(top_ten, 1):
-            bar_length = int((count / max_count) * 30)
-            bar = "█" * bar_length
-            summary += f"  {i:2d}. {str(key):15s} : {int(count):5d}  {bar}\n"
-=========
->>>>>>>>> Temporary merge branch 2
+        top_keys_raw = session_stats.get("top_keys", [])
+        top_keys: list[tuple[str, int]] = []
+        for item in top_keys_raw:
+            if isinstance(item, (tuple, list)) and len(item) >= 2:
+                top_keys.append((str(item[0]), int(item[1])))
 
         summary_lines = [
             "SESSION OVERVIEW",
@@ -222,11 +222,10 @@ class ReportPanel(QWidget):
             "--------",
         ]
         if top_keys:
-            for i, (key, count) in enumerate(top_keys[:10], 1):
-                summary_lines.append(f"{i:2d}. {key:<14} {count:>6}")
+            for index, (key, count) in enumerate(top_keys[:10], 1):
+                summary_lines.append(f"{index:2d}. {key:<14} {count:>6}")
         else:
             summary_lines.append("No key data available yet.")
-
         self._summary_text.setPlainText("\n".join(summary_lines))
 
         metrics_text = (
@@ -246,52 +245,16 @@ class ReportPanel(QWidget):
             f"Numeric: {numeric}\n"
             f"Special/Punctuation: {special}\n"
             f"Whitespace: {whitespace}\n"
-            f"Function/Control: {int(session_stats.get('function_count', 0))}\n"
+            f"Function/Control: {function_count}\n"
         )
         self._metrics_text.setPlainText(metrics_text)
 
         topkeys_lines = ["TOP KEYS BY FREQUENCY", "====================="]
         if top_keys:
             topkeys_lines.extend(
-                f"{i:2d}. {key:<20} {count:>6}"
-                for i, (key, count) in enumerate(top_keys, 1)
+                f"{index:2d}. {key:<20} {count:>6}"
+                for index, (key, count) in enumerate(top_keys, 1)
             )
         else:
             topkeys_lines.append("No key data available yet.")
-
-<<<<<<<<< Temporary merge branch 1
-TYPING DYNAMICS
-─────────────────────────────────────────────────────
-Words Per Minute (WPM)     : {wpm:.2f}
-Average Dwell Time         : {avg_dwell:.2f} ms
-Average Flight Time        : {avg_flight:.2f} ms
-Rhythm Consistency Score   : {rhythm_score:.3f}
-
-KEY FREQUENCY DISTRIBUTION
-─────────────────────────────────────────────────────
-Alphabetic Characters      : {session_stats.get("alpha_count", 0)}
-Numeric Characters         : {session_stats.get("numeric_count", 0)}
-Special/Punctuation        : {session_stats.get("special_count", 0)}
-Whitespace (Space/Tab)     : {session_stats.get("whitespace_count", 0)}
-Function/Control Keys      : {session_stats.get("function_count", 0)}
-
-CALCULATION NOTES
-─────────────────────────────────────────────────────
-• WPM = (Character Count / 5) / (Duration in minutes)
-• Dwell Time = Time key is held down (press to release)
-• Flight Time = Time between consecutive key presses
-• Rhythm Score = 1 / (1 + Coefficient of Variation)
-  - Score close to 1.0 = Consistent typing rhythm
-  - Score close to 0.0 = Erratic typing pattern
-"""
-        self._metrics_text.setText(metrics)
-
-        # Update top keys tab
-        topkeys_text = "TOP KEYS BY FREQUENCY\n" + "=" * 50 + "\n\n"
-        for i, (key, count) in enumerate(top_keys, 1):
-            topkeys_text += f"{i:2d}. {str(key):20s} {int(count):6d} times\n"
-
-        self._topkeys_text.setText(topkeys_text)
-=========
         self._topkeys_text.setPlainText("\n".join(topkeys_lines))
->>>>>>>>> Temporary merge branch 2
