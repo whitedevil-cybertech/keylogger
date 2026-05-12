@@ -123,15 +123,15 @@ class ReportPanel(QWidget):
         self._topkeys_text.setPlainText("Top key frequency list will appear during capture.")
 
     def _refresh_report(self) -> None:
-<<<<<<< HEAD
+<<<<<<<<< Temporary merge branch 1
         """Refresh the report using current session stats, if available."""
         if self._session_stats:
             self.update_report(self._session_stats)
             return
         QMessageBox.information(self, "Info", "No session data yet. Start capture to view analytics.")
-=======
+=========
         QMessageBox.information(self, "Info", "Report auto-updates during active capture.")
->>>>>>> da43d8a949c73bcc20aec1b87dad0b7a787e8ca2
+>>>>>>>>> Temporary merge branch 2
 
     def _export_report(self) -> None:
         file_path, _ = QFileDialog.getSaveFileName(
@@ -142,8 +142,8 @@ class ReportPanel(QWidget):
         )
         if file_path:
             try:
-<<<<<<< HEAD
-=======
+<<<<<<<<< Temporary merge branch 1
+=========
                 if Path(file_path).exists():
                     overwrite = QMessageBox.question(
                         self,
@@ -154,7 +154,7 @@ class ReportPanel(QWidget):
                     )
                     if overwrite != QMessageBox.Yes:
                         return
->>>>>>> da43d8a949c73bcc20aec1b87dad0b7a787e8ca2
+>>>>>>>>> Temporary merge branch 2
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(self._summary_text.toPlainText())
                 QMessageBox.information(self, "Success", f"Report exported to:\n{file_path}")
@@ -195,15 +195,15 @@ class ReportPanel(QWidget):
             bar.setValue(pct)
 
         top_keys = session_stats.get("top_keys", [])
-<<<<<<< HEAD
+<<<<<<<<< Temporary merge branch 1
         top_ten = top_keys[:10]
         max_count = max((count for _, count in top_ten), default=1)
         for i, (key, count) in enumerate(top_ten, 1):
             bar_length = int((count / max_count) * 30)
             bar = "█" * bar_length
             summary += f"  {i:2d}. {str(key):15s} : {int(count):5d}  {bar}\n"
-=======
->>>>>>> da43d8a949c73bcc20aec1b87dad0b7a787e8ca2
+=========
+>>>>>>>>> Temporary merge branch 2
 
         summary_lines = [
             "SESSION OVERVIEW",
@@ -259,7 +259,7 @@ class ReportPanel(QWidget):
         else:
             topkeys_lines.append("No key data available yet.")
 
-<<<<<<< HEAD
+<<<<<<<<< Temporary merge branch 1
 TYPING DYNAMICS
 ─────────────────────────────────────────────────────
 Words Per Minute (WPM)     : {wpm:.2f}
@@ -292,6 +292,6 @@ CALCULATION NOTES
             topkeys_text += f"{i:2d}. {str(key):20s} {int(count):6d} times\n"
 
         self._topkeys_text.setText(topkeys_text)
-=======
+=========
         self._topkeys_text.setPlainText("\n".join(topkeys_lines))
->>>>>>> da43d8a949c73bcc20aec1b87dad0b7a787e8ca2
+>>>>>>>>> Temporary merge branch 2
