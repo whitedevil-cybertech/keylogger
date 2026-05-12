@@ -1,196 +1,116 @@
-"""
-Reusable custom widgets for consistent, polished UI components.
-"""
+"""Reusable widgets for a compact, consistent desktop UI."""
 
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QRect
-from PySide6.QtGui import QPainter, QFont, QLinearGradient, QColor, QPixmap, QIcon
-from PySide6.QtWidgets import (
-    QPushButton, 
-    QLabel, 
-    QFrame, 
-    QVBoxLayout, 
-    QHBoxLayout,
-    QProgressBar,
-    QWidget,
-)
-from .theme import Theme
+from __future__ import annotations
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+
 
 class CustomButton(QPushButton):
-    """Modern, animated button with hover effects."""
-    
-    def __init__(self, text="", icon="", role="primary"):
+    """Compact themed button with role-based styling."""
+
+    def __init__(self, text: str = "", icon: str = "", role: str = "primary") -> None:
         super().__init__(text)
         self.setRole(role)
-        self.setMinimumHeight(40)
-        self._scale_anim = QPropertyAnimation(self, b"geometry")
-        self._scale_anim.setDuration(150)
-        self._scale_anim.setEasingCurve(QEasingCurve.OutCubic)
-    
-    def setRole(self, role):
-        """Set button role: primary, secondary, danger."""
-        self._role = role
+        self.setMinimumHeight(30)
+        self.setCursor(Qt.PointingHandCursor)
+
+    def setRole(self, role: str) -> None:
+        if role not in {"primary", "secondary", "danger"}:
+            role = "primary"
         self.setProperty("role", role)
         self.style().unpolish(self)
         self.style().polish(self)
-        self.update()
-    
-    def enterEvent(self, event):
-        rect = self.geometry()
-        self._scale_anim.setStartValue(QRect(rect))
-        scaled_rect = rect.adjusted(-2, -2, 2, 2)
-        self._scale_anim.setEndValue(QRect(scaled_rect))
-        self._scale_anim.start()
-        super().enterEvent(event)
-    
-    def leaveEvent(self, event):
-        rect = self.geometry()
-        self._scale_anim.setStartValue(QRect(rect))
-        self._scale_anim.setEndValue(QRect(rect.adjusted(2, 2, -2, -2)))
-        self._scale_anim.start()
-        super().leaveEvent(event)
+
 
 class MetricCard(QFrame):
-    """Dashboard-style metric card with icon, value, subtitle."""
-    
-    def __init__(self, icon="", value="0", subtitle="", accent_color="#00d4aa"):
+    """Compact metric card with icon/title/value."""
+
+    def __init__(self, icon: str = "", value: str = "0", subtitle: str = "", accent_color: str = "") -> None:
         super().__init__()
         self.setProperty("role", "card")
-        self._value = value
-        self._accent_color = accent_color
-        
+        self._accent = accent_color
+
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(4)
-        
-        # Icon row
-        icon_layout = QHBoxLayout()
-        icon_layout.addStretch()
+
+        top_row = QHBoxLayout()
+        top_row.setContentsMargins(0, 0, 0, 0)
+        top_row.setSpacing(6)
+
         self._icon_label = QLabel(icon)
         self._icon_label.setProperty("role", "subtitle")
-        self._icon_label.setStyleSheet(f"color: {accent_color}; font-size: 24px;")
-        icon_layout.addWidget(self._icon_label)
-        icon_layout.addStretch()
-        layout.addLayout(icon_layout)
-        
-        # Value
-        self._value_label = QLabel(value)
-        self._value_label.setAlignment(Qt.AlignCenter)
-        self._value_label.setStyleSheet("font-size: 28px; font-weight: 700; margin: 0;")
-        layout.addWidget(self._value_label)
-        
-        # Subtitle
+        top_row.addWidget(self._icon_label)
+
         self._subtitle_label = QLabel(subtitle)
-        self._subtitle_label.setAlignment(Qt.AlignCenter)
         self._subtitle_label.setProperty("role", "subtitle")
-        layout.addWidget(self._subtitle_label)
-        
-        layout.addStretch()
-    
-    def setValue(self, value):
+        top_row.addWidget(self._subtitle_label, 1)
+
+        layout.addLayout(top_row)
+
+        self._value_label = QLabel(str(value))
+        self._value_label.setStyleSheet("font-size: 20px; font-weight: 700;")
+        self._value_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        layout.addWidget(self._value_label)
+
+        if accent_color:
+            self.setAccent(accent_color)
+
+    def setValue(self, value: str) -> None:
         self._value_label.setText(str(value))
-    
-    def setAccent(self, color):
-        self._accent_color = color
-        self._icon_label.setStyleSheet(f"color: {color}; font-size: 24px;")
+
+    def setAccent(self, color: str) -> None:
+        self._accent = color
+        self._icon_label.setStyleSheet(f"color: {color};")
+        self._value_label.setStyleSheet(
+            f"font-size: 20px; font-weight: 700; color: {color};"
+        )
+
 
 class StatusBadge(QLabel):
-    """Animated status indicator badge."""
-    
+    """Status pill for capture state."""
+
     STATES = {
-        'idle': {'text': '🟠 Idle', 'color': '#ffa726'},
-        'recording': {'text': '🟢 Recording', 'color': '#00d4aa'},
-        'error': {'text': '🔴 Error', 'color': '#ff4757'},
-        'paused': {'text': '🟡 Paused', 'color': '#ffb300'},
+        "idle": {"text": "Idle", "bg": "rgba(242,185,75,0.14)", "fg": "#f2b94b"},
+        "recording": {"text": "Recording", "bg": "rgba(52,211,153,0.16)", "fg": "#34d399"},
+        "error": {"text": "Error", "bg": "rgba(227,93,106,0.16)", "fg": "#e35d6a"},
+        "paused": {"text": "Paused", "bg": "rgba(130,145,163,0.16)", "fg": "#9aaec1"},
     }
-    
-    def __init__(self):
+
+    def __init__(self) -> None:
         super().__init__()
-        self.setMinimumHeight(32)
-        self.setProperty("role", "status-idle")
-        self.setText(self.STATES['idle']['text'])
         self.setAlignment(Qt.AlignCenter)
-        self.setStyleSheet("padding: 8px 16px; border-radius: 16px; font-weight: 600;")
-    
-    def setStatus(self, state):
-        """Set status: idle, recording, error, paused."""
-        if state in self.STATES:
-            config = self.STATES[state]
-            self.setText(config['text'])
-            self.setProperty("role", f"status-{state}")
-            self.setStyleSheet(f"""
-                QLabel[role="status-{state}"] {{
-                    background: rgba({config['color']}, 0.15);
-                    color: {config['color']};
-                    padding: 8px 16px;
-                    border-radius: 16px;
-                    font-weight: 600;
-                }}
-            """)
-            self.style().unpolish(self)
-            self.style().polish(self)
-            self.update()
+        self.setMinimumHeight(26)
+        self.setContentsMargins(10, 2, 10, 2)
+        self.setStatus("idle")
 
-class ShadowFrame(QFrame):
-    """Frame with customizable drop shadow."""
-    
-    def __init__(self, shadow_intensity="medium"):
-        super().__init__()
-        self._shadow_intensity = shadow_intensity
-        self.setProperty("role", "shadow-frame")
-    
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        
-        # Gradient background
-        gradient = QLinearGradient(0, 0, 0, self.height())
-        gradient.setColorAt(0, QColor("#253044"))
-        gradient.setColorAt(1, QColor("#1e2329"))
-        painter.fillRect(self.rect(), gradient)
-        
-        # Shadow simulation
-        shadow_offset = 4 if self._shadow_intensity == "strong" else 2
-        shadow_rect = self.rect().adjusted(shadow_offset, shadow_offset, -shadow_offset, -shadow_offset)
-        painter.fillRect(shadow_rect, QColor(0, 0, 0, 30))
-        
-        super().paintEvent(event)
+    def setStatus(self, state: str) -> None:
+        config = self.STATES.get(state, self.STATES["idle"])
+        self.setText(f"● {config['text']}")
+        self.setStyleSheet(
+            "QLabel {"
+            f"background: {config['bg']};"
+            f"color: {config['fg']};"
+            "border-radius: 12px;"
+            "padding: 2px 10px;"
+            "font-size: 11px;"
+            "font-weight: 600;"
+            "}"
+        )
 
-class CircularProgress(QProgressBar):
-    """Custom circular progress indicator."""
-    
-    def __init__(self):
-        super().__init__()
-        self.setFixedSize(60, 60)
-        self.setTextVisible(False)
-        self.setStyleSheet("""
-            QProgressBar {
-                border-radius: 30px;
-                background-color: rgba(40, 45, 53, 0.5);
-                border: 3px solid transparent;
-            }
-            QProgressBar::chunk {
-                border-radius: 30px;
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #00d4aa, stop:1 #00b894);
-            }
-        """)
-    
-    def paintEvent(self, event):
-        # Custom circular painting can be added here
-        super().paintEvent(event)
 
-# Icon utilities (Unicode mapping for common icons)
 ICONS = {
-    'start': '▶️',
-    'stop': '⏹️',
-    'folder': '📁',
-    'stats': '📊',
-    'report': '📋',
-    'logs': '📄',
-    'key': '⌨️',
-    'time': '⏱️',
-    'speed': '⚡',
-    'rhythm': '🎵',
-    'warning': '⚠️',
-    'shield': '🛡️',
+    "start": "▶",
+    "stop": "■",
+    "folder": "📁",
+    "stats": "📊",
+    "report": "📋",
+    "logs": "🧾",
+    "key": "⌨",
+    "time": "⏱",
+    "speed": "⚡",
+    "rhythm": "◍",
+    "warning": "⚠",
+    "shield": "🛡",
 }
