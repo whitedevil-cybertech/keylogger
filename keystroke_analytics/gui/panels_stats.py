@@ -196,8 +196,8 @@ class StatsPanel(QWidget):
             numeric = int(stats.get("numeric_count", 0))
             special = int(stats.get("special_count", 0))
             distribution_total = alpha + numeric + special
-            keymix_pct = int((alpha / distribution_total) * 100) if distribution_total else 0
-            self._keymix_bar.setValue(max(0, min(keymix_pct, 100)))
+            alpha_percentage = int((alpha / distribution_total) * 100) if distribution_total else 0
+            self._keymix_bar.setValue(max(0, min(alpha_percentage, 100)))
 
             activity_pct = int(min((total_keys / 500) * 100, 100))
             self._activity_bar.setValue(activity_pct)

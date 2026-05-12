@@ -32,6 +32,9 @@ from .widgets import ICONS, CustomButton, MetricCard, StatusBadge
 
 logger = logging.getLogger(__name__)
 
+MAX_ACTIVE_WINDOW_LENGTH = 28
+ACTIVE_WINDOW_TRUNCATE_LENGTH = 25
+
 
 class MainWindow(QMainWindow):
     def __init__(
@@ -357,8 +360,8 @@ class MainWindow(QMainWindow):
             or stats.get("window_title")
             or "N/A"
         )
-        if len(str(active_window)) > 28:
-            active_window = f"{str(active_window)[:25]}..."
+        if len(str(active_window)) > MAX_ACTIVE_WINDOW_LENGTH:
+            active_window = f"{str(active_window)[:ACTIVE_WINDOW_TRUNCATE_LENGTH]}..."
 
         special_keys = int(stats.get("special_count", 0)) if stats else 0
 
