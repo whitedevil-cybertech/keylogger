@@ -187,7 +187,7 @@ class ReportPanel(QWidget):
         special = int(session_stats.get("special_count", 0))
         whitespace = int(session_stats.get("whitespace_count", 0))
         function_count = int(session_stats.get("function_count", 0))
-        distribution_total = max(alpha + numeric + special + whitespace + function_count, 1)
+        distribution_total = max(alpha + numeric + special + whitespace, 1)
 
         distribution_map = {
             "alpha": alpha,
