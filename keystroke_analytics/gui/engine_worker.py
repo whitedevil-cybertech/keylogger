@@ -158,16 +158,23 @@ class EngineWorkerThread(QThread):
     def run(self) -> None:
         """Run the worker on this thread."""
         logger.debug("EngineWorkerThread.run() starting")
-        self._worker = EngineWorker(self._config)
+        try:
+            self._worker = EngineWorker(self._config)
 
-        # Connect worker signals to this thread's signals for re-emission
-        self._worker.started.connect(self.started.emit)
-        self._worker.stopped.connect(self.stopped.emit)
-        self._worker.error.connect(self.error.emit)
-        self._worker.stats_updated.connect(self.stats_updated.emit)
+            # Connect worker signals to this thread's signals for re-emission
+            self._worker.started.connect(self.started.emit)
+            self._worker.stopped.connect(self.stopped.emit)
+            self._worker.error.connect(self.error.emit)
+            self._worker.stats_updated.connect(self.stats_updated.emit)
 
-        # Run worker (blocks until stop() is called)
-        self._worker.run()
+            # Run worker (blocks until stop() is called)
+            self._worker.run()
+
+        except Exception as e:  # noqa: BLE001
+            logger.exception("EngineWorkerThread fatal error: %s", e)
+            self.error.emit(str(e))
+            self.stopped.emit()
+
         logger.debug("EngineWorkerThread.run() completed")
 
     def stop(self) -> None:
