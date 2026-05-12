@@ -123,7 +123,11 @@ class ReportPanel(QWidget):
         self._topkeys_text.setPlainText("Top key frequency list will appear during capture.")
 
     def _refresh_report(self) -> None:
-        QMessageBox.information(self, "Info", "Report auto-updates during active capture.")
+        """Refresh the report using current session stats, if available."""
+        if self._session_stats:
+            self.update_report(self._session_stats)
+            return
+        QMessageBox.information(self, "Info", "No session data yet. Start capture to view analytics.")
 
     def _export_report(self) -> None:
         file_path, _ = QFileDialog.getSaveFileName(
