@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -133,6 +134,16 @@ class ReportPanel(QWidget):
         )
         if file_path:
             try:
+                if Path(file_path).exists():
+                    overwrite = QMessageBox.question(
+                        self,
+                        "Overwrite File?",
+                        f"The file already exists:\n{file_path}\n\nDo you want to overwrite it?",
+                        QMessageBox.Yes | QMessageBox.No,
+                        QMessageBox.No,
+                    )
+                    if overwrite != QMessageBox.Yes:
+                        return
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(self._summary_text.toPlainText())
                 QMessageBox.information(self, "Success", f"Report exported to:\n{file_path}")

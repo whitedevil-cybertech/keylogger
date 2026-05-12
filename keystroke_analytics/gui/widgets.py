@@ -16,6 +16,8 @@ class CustomButton(QPushButton):
         self.setCursor(Qt.PointingHandCursor)
 
     def setRole(self, role: str) -> None:
+        if role not in {"primary", "secondary", "danger"}:
+            role = "primary"
         self.setProperty("role", role)
         self.style().unpolish(self)
         self.style().polish(self)

@@ -228,14 +228,14 @@ class LogsPanel(QWidget):
             return
 
         cursor = QTextCursor(self._text_display.document())
-        char_format = QTextCharFormat()
-        char_format.setBackground(QColor("#f2b94b"))
-        char_format.setForeground(QColor("#111827"))
+        highlight_format = QTextCharFormat()
+        highlight_format.setBackground(QColor("#f2b94b"))
+        highlight_format.setForeground(QColor("#111827"))
 
         while not cursor.isNull():
             cursor = self._text_display.document().find(search_term, cursor)
             if not cursor.isNull():
-                cursor.mergeCharFormat(char_format)
+                cursor.mergeCharFormat(highlight_format)
                 cursor.movePosition(QTextCursor.Right)
 
     def _clear_search(self) -> None:
