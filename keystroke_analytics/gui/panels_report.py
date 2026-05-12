@@ -138,6 +138,16 @@ class ReportPanel(QWidget):
                 normalized.append((str(item[0]), int(item[1])))
         return normalized
 
+    def _compose_export_text(self) -> str:
+        sections = (
+            ("SUMMARY", self._summary_text.toPlainText()),
+            ("DETAILED METRICS", self._metrics_text.toPlainText()),
+            ("TOP KEYS", self._topkeys_text.toPlainText()),
+        )
+        return "\n\n".join(
+            f"{title}\n{'=' * len(title)}\n{content}".rstrip() for title, content in sections
+        )
+
     def _refresh_report(self) -> None:
         if self._session_stats:
             self.update_report(self._session_stats)
@@ -171,7 +181,7 @@ class ReportPanel(QWidget):
                     return
 
             with open(file_path, "w", encoding="utf-8") as file_handle:
-                file_handle.write(self._summary_text.toPlainText())
+                file_handle.write(self._compose_export_text())
             QMessageBox.information(self, "Success", f"Report exported to:\n{file_path}")
         except Exception as exc:
             QMessageBox.critical(self, "Error", f"Failed to export report: {exc}")
@@ -196,7 +206,7 @@ class ReportPanel(QWidget):
         numeric = int(session_stats.get("numeric_count", 0))
         special = int(session_stats.get("special_count", 0))
         whitespace = int(session_stats.get("whitespace_count", 0))
-        # Included in detailed metrics text below; distribution bars intentionally show 4 categories.
+        # Included in detailed metrics text; distribution bars intentionally show only 4 categories.
         function_count = int(session_stats.get("function_count", 0))
         # Keep percentages aligned to the four visible distribution bars.
         distribution_total = max(alpha + numeric + special + whitespace, 1)
