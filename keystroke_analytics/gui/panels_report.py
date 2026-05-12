@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from .widgets import ICONS, CustomButton, MetricCard
 
 logger = logging.getLogger(__name__)
+_DISTRIBUTION_LABEL_MIN_WIDTH = 104
 
 
 class ReportPanel(QWidget):
@@ -100,7 +101,7 @@ class ReportPanel(QWidget):
             row.setSpacing(8)
 
             label = QLabel(f"{category}: 0")
-            label.setMinimumWidth(104)
+            label.setMinimumWidth(_DISTRIBUTION_LABEL_MIN_WIDTH)
             bar = QProgressBar()
             bar.setRange(0, 100)
             bar.setValue(0)
@@ -186,7 +187,7 @@ class ReportPanel(QWidget):
         special = int(session_stats.get("special_count", 0))
         whitespace = int(session_stats.get("whitespace_count", 0))
         function_count = int(session_stats.get("function_count", 0))
-        distribution_total = max(alpha + numeric + special + whitespace, 1)
+        distribution_total = max(alpha + numeric + special + whitespace + function_count, 1)
 
         distribution_map = {
             "alpha": alpha,
