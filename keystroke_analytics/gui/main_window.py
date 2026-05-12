@@ -1,34 +1,26 @@
-"""
-Main GUI window with tabbed interface for capture, logs, and reports.
-"""
+"""Main GUI window with compact sidebar navigation and dense dashboard layout."""
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QCloseEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
-    QGridLayout,
-    QHBoxLayout,
-    QVBoxLayout,
-    QScrollArea,
-    QSpacerItem,
     QSizePolicy,
     QTabWidget,
+    QVBoxLayout,
     QWidget,
-    QFrame,
 )
-
-from .widgets import CustomButton, StatusBadge, MetricCard, ICONS
-from .theme import Theme
 
 from keystroke_analytics.gui.controller import EngineController, GuiConfigOverrides
 from keystroke_analytics.gui.dialogs import ConsentDialog, PassphraseDialog
@@ -36,21 +28,23 @@ from keystroke_analytics.gui.panels_logs import LogsPanel
 from keystroke_analytics.gui.panels_report import ReportPanel
 from keystroke_analytics.gui.panels_stats import StatsPanel
 
+from .widgets import ICONS, CustomButton, MetricCard, StatusBadge
+
 logger = logging.getLogger(__name__)
 
 
 class MainWindow(QMainWindow):
     def __init__(
         self,
-        config_path: Optional[Path],
-        log_dir: Optional[Path],
+        config_path: Path | None,
+        log_dir: Path | None,
         encrypt: bool,
         analytics_enabled: bool,
     ) -> None:
         super().__init__()
         self.setWindowTitle("Keystroke Analytics Pro")
-        self.resize(1400, 900)
-        self.setMinimumSize(1000, 700)
+        self.resize(1320, 840)
+        self.setMinimumSize(960, 620)
 
         self._config_path = config_path
         self._log_dir = log_dir
@@ -63,89 +57,46 @@ class MainWindow(QMainWindow):
         self._controller.error.connect(self._on_error)
         self._controller.stats_updated.connect(self._on_stats_updated)
 
-        # Create main widget and layout
         main_widget = QWidget()
-        main_layout = QVBoxLayout(main_widget)
-        main_layout.setSpacing(0)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout = QVBoxLayout(main_widget)
+        root_layout.setContentsMargins(10, 10, 10, 10)
+        root_layout.setSpacing(8)
 
-        # Modern control bar with StatusBadge and CustomButtons
-        control_frame = QFrame()
-        control_frame.setProperty("role", "card")
-        control_layout = QHBoxLayout(control_frame)
-        control_layout.setContentsMargins(16, 12, 16, 12)
-        control_layout.setSpacing(12)
+        root_layout.addWidget(self._build_top_bar())
 
-        # Status badge
-        self._status_badge = StatusBadge()
-        self._status_badge.setStatus("idle")
-        control_layout.addWidget(self._status_badge)
-
-        # Config info
-        config_label = QLabel("Configuration Active")
-        config_label.setProperty("role", "subtitle")
-        config_label.setStyleSheet("font-size: 11px;")
-        control_layout.addWidget(config_label)
-        control_layout.addSpacing(12)
-
-        # Log directory selector
-        self._btn_choose_log = CustomButton(ICONS['folder'] + " Log Directory", role="secondary")
-        self._btn_choose_log.clicked.connect(self._choose_log_dir)
-        self._btn_choose_log.setMaximumHeight(32)
-        control_layout.addWidget(self._btn_choose_log)
-
-        # Primary action buttons
-        btn_group = QHBoxLayout()
-        btn_group.setSpacing(8)
-        
-        self._btn_start = CustomButton(ICONS['start'] + " Start Capture")
-        self._btn_start.clicked.connect(self._start_clicked)
-        self._btn_start.setMaximumHeight(32)
-        btn_group.addWidget(self._btn_start)
-
-        self._btn_stop = CustomButton(ICONS['stop'] + " Stop Capture", role="danger")
-        self._btn_stop.setEnabled(False)
-        self._btn_stop.clicked.connect(self._stop_clicked)
-        self._btn_stop.setMaximumHeight(32)
-        btn_group.addWidget(self._btn_stop)
-
-        control_layout.addLayout(btn_group)
-        control_layout.addStretch()
-
-        main_layout.addWidget(control_frame)
-
-        # Tabbed interface
         self._tabs = QTabWidget()
+        self._tabs.setTabPosition(QTabWidget.West)
+        self._tabs.setDocumentMode(True)
+        self._tabs.setProperty("role", "panel")
+        self._tabs.setStyleSheet(
+            """
+            QTabWidget::pane { margin-left: 0px; }
+            QTabBar::tab {
+                min-width: 148px;
+                text-align: left;
+                padding: 10px 12px;
+                margin: 3px 5px;
+            }
+            """
+        )
 
-        # Capture tab
-        # Enhanced tabbed interface with modern styling
-        self._tabs = QTabWidget()
-        self._tabs.setStyleSheet("""
-            QTabBar::tab { height: 42px; padding: 12px 24px; font-weight: 500; }
-            QTabWidget::pane { border: 1px solid #2a3443; border-radius: 12px; margin-top: 8px; }
-        """)
-
-        # Tabs
         self._capture_tab = self._create_capture_tab()
-        self._tabs.addTab(self._capture_tab, ICONS['stats'] + " Dashboard")
+        self._tabs.addTab(self._capture_tab, f"{ICONS['stats']} Dashboard")
 
         self._stats_panel = StatsPanel()
         self._stats_panel.set_log_directory(log_dir)
-        self._tabs.addTab(self._stats_panel, ICONS['key'] + " Live Stats")
+        self._tabs.addTab(self._stats_panel, f"{ICONS['key']} Live Stats")
 
         self._report_panel = ReportPanel()
-        self._tabs.addTab(self._report_panel, ICONS['report'] + " Analytics")
+        self._tabs.addTab(self._report_panel, f"{ICONS['report']} Analytics")
 
         self._logs_panel = LogsPanel()
         self._logs_panel.set_log_directory(log_dir)
-        self._tabs.addTab(self._logs_panel, ICONS['logs'] + " Logs")
+        self._tabs.addTab(self._logs_panel, f"{ICONS['logs']} Logs")
 
-        main_layout.addWidget(self._tabs, 1)
-        main_layout.setSpacing(0)
-
+        root_layout.addWidget(self._tabs, 1)
         self.setCentralWidget(main_widget)
 
-        # Enhanced shortcuts with tooltips
         self._panic = QShortcut(QKeySequence("Ctrl+Shift+Q"), self)
         self._panic.setWhatsThis("Emergency stop capture")
         self._panic.activated.connect(self._stop_clicked)
@@ -154,95 +105,163 @@ class MainWindow(QMainWindow):
         self._btn_stop.setToolTip("Stop capture and generate final report")
         self._btn_choose_log.setToolTip("Select custom log directory")
 
-        # Auto-refresh timer (for manual refresh if needed, not for polling stats)
         self._refresh_timer = QTimer()
         self._refresh_timer.timeout.connect(self._refresh_panels)
-        self._refresh_timer.setInterval(2000)  # 2s for manual refresh
+        self._refresh_timer.setInterval(2000)
 
-    def _create_capture_tab(self) -> QWidget:
-        """Create the main capture control tab."""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
+        self._refresh_dashboard_cards({})
+
+    def _build_top_bar(self) -> QFrame:
+        top = QFrame()
+        top.setProperty("role", "panel")
+
+        layout = QHBoxLayout(top)
+        layout.setContentsMargins(10, 8, 10, 8)
         layout.setSpacing(8)
-        layout.setContentsMargins(16, 16, 16, 16)
 
-        # Title
-        title = QLabel("📝 Keystroke Capture Control")
+        title = QLabel("Keystroke Analytics Pro")
         title.setProperty("role", "title")
         layout.addWidget(title)
 
-        # Config Info Card - Compact
-        config_frame = QFrame()
-        config_frame.setProperty("role", "card")
-        config_layout = QVBoxLayout(config_frame)
-        config_layout.setSpacing(6)
-        config_layout.setContentsMargins(12, 10, 12, 10)
+        self._status_badge = StatusBadge()
+        self._status_badge.setStatus("idle")
+        layout.addWidget(self._status_badge)
 
-        self._log_dir_label = QLabel(f"📁 Log Directory: {self._log_dir or 'default'}")
-        self._enc_label = QLabel(f"🔐 Encryption: {'Enabled' if self._encrypt else 'Disabled'}")
-        self._analytics_label = QLabel(f"📊 Analytics: {'Enabled' if self._analytics_enabled else 'Disabled'}")
+        # Backward compatibility for smoke tests expecting this label.
+        self._status = QLabel("Status: Idle")
+        self._status.setProperty("role", "muted")
+        layout.addWidget(self._status)
 
-        for label in [self._log_dir_label, self._enc_label, self._analytics_label]:
-            label.setProperty("role", "subtitle")
-            label.setStyleSheet("font-size: 12px; padding: 2px;")
-            config_layout.addWidget(label)
+        layout.addSpacing(8)
 
-        layout.addWidget(config_frame)
+        self._btn_start = CustomButton("Start Capture")
+        self._btn_start.clicked.connect(self._start_clicked)
+        layout.addWidget(self._btn_start)
 
-        # Instructions Card - Compact
-        instructions_frame = QFrame()
-        instructions_frame.setProperty("role", "card")
-        instructions_layout = QVBoxLayout(instructions_frame)
-        instructions_layout.setSpacing(4)
-        instructions_layout.setContentsMargins(12, 10, 12, 10)
+        self._btn_stop = CustomButton("Stop Capture", role="danger")
+        self._btn_stop.setEnabled(False)
+        self._btn_stop.clicked.connect(self._stop_clicked)
+        layout.addWidget(self._btn_stop)
 
-        instructions_title = QLabel("📋 Quick Start")
-        instructions_title.setProperty("role", "subtitle")
-        instructions_title.setStyleSheet("font-size: 12px; font-weight: bold;")
-        instructions_layout.addWidget(instructions_title)
+        self._btn_choose_log = CustomButton(f"{ICONS['folder']} Log Directory", role="secondary")
+        self._btn_choose_log.clicked.connect(self._choose_log_dir)
+        layout.addWidget(self._btn_choose_log)
 
-        instructions = QLabel(
-            "1. Click 'Start Capture' to begin • 2. View stats in Live Stats tab\n"
-            "3. Stop capture when done • 4. Press Ctrl+Shift+Q to emergency stop"
+        self._btn_open_log_dir = CustomButton("Open Logs", role="secondary")
+        self._btn_open_log_dir.clicked.connect(self._open_logs_directory)
+        layout.addWidget(self._btn_open_log_dir)
+
+        self._session_info = QLabel("Session: idle")
+        self._session_info.setProperty("role", "subtitle")
+        self._session_info.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        layout.addWidget(self._session_info, 1)
+
+        return top
+
+    def _create_capture_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(10)
+        layout.setContentsMargins(12, 12, 12, 12)
+
+        heading = QLabel("Capture Dashboard")
+        heading.setProperty("role", "title")
+        layout.addWidget(heading)
+
+        cards_grid = QGridLayout()
+        cards_grid.setSpacing(8)
+
+        self._dashboard_cards = {
+            "total_keys": MetricCard(ICONS["key"], "0", "Total Keys", "#34d399"),
+            "wpm": MetricCard(ICONS["speed"], "0.0", "WPM", "#19c7c0"),
+            "active_window": MetricCard("🪟", "N/A", "Active Window", "#9fb1c2"),
+            "session_duration": MetricCard(ICONS["time"], "00:00:00", "Session Duration", "#f2b94b"),
+            "special_keys": MetricCard("⌥", "0", "Special Keys", "#c084fc"),
+            "encryption": MetricCard(ICONS["shield"], "Disabled", "Encryption", "#e35d6a"),
+        }
+
+        keys = list(self._dashboard_cards.keys())
+        for idx, key in enumerate(keys):
+            row, col = divmod(idx, 3)
+            cards_grid.addWidget(self._dashboard_cards[key], row, col)
+
+        layout.addLayout(cards_grid)
+
+        info_row = QHBoxLayout()
+        info_row.setSpacing(8)
+
+        self._capture_info_card = self._build_info_card(
+            "Session Configuration",
+            [
+                f"Log Directory: {self._log_dir or 'default'}",
+                f"Encryption: {'Enabled' if self._encrypt else 'Disabled'}",
+                f"Analytics: {'Enabled' if self._analytics_enabled else 'Disabled'}",
+            ],
         )
-        instructions.setWordWrap(True)
-        instructions.setStyleSheet("font-size: 11px; padding: 2px;")
-        instructions_layout.addWidget(instructions)
+        info_row.addWidget(self._capture_info_card, 1)
 
-        layout.addWidget(instructions_frame)
-
-        # Features Card - Compact
-        features_frame = QFrame()
-        features_frame.setProperty("role", "card")
-        features_layout = QVBoxLayout(features_frame)
-        features_layout.setSpacing(4)
-        features_layout.setContentsMargins(12, 10, 12, 10)
-
-        features_title = QLabel("✨ Capabilities")
-        features_title.setProperty("role", "subtitle")
-        features_title.setStyleSheet("font-size: 12px; font-weight: bold;")
-        features_layout.addWidget(features_title)
-
-        features = QLabel(
-            "⚡ Real-time WPM • 🎵 Rhythm Analysis • 📈 Key Patterns • 💾 Encrypted Logs"
+        quick_card = self._build_info_card(
+            "Quick Start",
+            [
+                "1) Start Capture",
+                "2) Monitor Live Stats",
+                "3) Stop Capture to end session",
+                "Emergency stop: Ctrl+Shift+Q",
+            ],
         )
-        features.setWordWrap(True)
-        features.setStyleSheet("font-size: 11px; padding: 2px;")
-        features_layout.addWidget(features)
+        info_row.addWidget(quick_card, 1)
 
-        layout.addWidget(features_frame)
+        layout.addLayout(info_row)
 
-        layout.addStretch()
+        cap_card = self._build_info_card(
+            "Capabilities",
+            [
+                "Real-time WPM and timing metrics",
+                "Rhythm and key pattern analysis",
+                "Encrypted log storage support",
+                "Live session analytics updates",
+            ],
+        )
+        layout.addWidget(cap_card)
 
+        layout.addStretch(1)
         return widget
 
+    def _build_info_card(self, title: str, lines: list[str]) -> QFrame:
+        frame = QFrame()
+        frame.setProperty("role", "card")
+        box = QVBoxLayout(frame)
+        box.setContentsMargins(10, 10, 10, 10)
+        box.setSpacing(4)
+
+        title_label = QLabel(title)
+        title_label.setProperty("role", "subtitle")
+        box.addWidget(title_label)
+
+        labels: list[QLabel] = []
+        for line in lines:
+            lbl = QLabel(line)
+            lbl.setProperty("role", "muted")
+            lbl.setWordWrap(True)
+            box.addWidget(lbl)
+            labels.append(lbl)
+
+        if title == "Session Configuration":
+            self._log_dir_label, self._enc_label, self._analytics_label = labels[:3]
+
+        return frame
+
     def _choose_log_dir(self) -> None:
-        """Update log directory and refresh panels."""
         directory = QFileDialog.getExistingDirectory(self, "Select Log Directory")
         if directory:
             self._log_dir = Path(directory)
             self._stats_panel.set_log_directory(self._log_dir)
             self._logs_panel.set_log_directory(self._log_dir)
+            self._log_dir_label.setText(f"Log Directory: {self._log_dir}")
+
+    def _open_logs_directory(self) -> None:
+        self._tabs.setCurrentWidget(self._logs_panel)
+        self._logs_panel._open_log_directory()
 
     def _start_clicked(self) -> None:
         consent = ConsentDialog()
@@ -274,50 +293,42 @@ class MainWindow(QMainWindow):
         self._refresh_timer.stop()
 
     def _on_started(self) -> None:
-        """Called when capture starts."""
         self._status_badge.setStatus("recording")
-        self.setWindowTitle("Keystroke Analytics Pro - 🔴 Recording")
+        self._status.setText("Status: Recording")
+        self.setWindowTitle("Keystroke Analytics Pro - Recording")
         self._btn_start.setEnabled(False)
         self._btn_stop.setEnabled(True)
         self._btn_choose_log.setEnabled(False)
-        
-        # Enable auto-refresh of logs during capture
+
         self._logs_panel.enable_auto_refresh(interval_ms=2000)
 
     def _on_stopped(self) -> None:
-        """Called when capture stops."""
         self._status_badge.setStatus("idle")
+        self._status.setText("Status: Idle")
         self.setWindowTitle("Keystroke Analytics Pro")
         self._btn_start.setEnabled(True)
         self._btn_stop.setEnabled(False)
         self._btn_choose_log.setEnabled(True)
         self._refresh_timer.stop()
-        
-        # Disable auto-refresh of logs
+
         self._logs_panel.disable_auto_refresh()
-        
-        # Reset stats display
         self._stats_panel.reset_display()
-        
-        # Reload logs to show final session
+        self._refresh_dashboard_cards({})
+        self._session_info.setText("Session: idle")
+
         if self._log_dir:
             self._logs_panel.set_log_directory(self._log_dir)
 
     def _on_error(self, message: str) -> None:
-        """Called when an error occurs."""
         self._status_badge.setStatus("error")
+        self._status.setText("Status: Error")
         logger.error("Capture error: %s", message)
         QMessageBox.critical(self, "Capture Error", f"An error occurred:\n\n{message}")
 
     def _on_stats_updated(self, stats: dict) -> None:
-        """
-        Handle stats update signal from controller.
-        
-        Called periodically during capture to update UI with live statistics.
-        """
         if not stats:
             return
-        
+
         try:
             logger.debug(
                 "UI stats update received: ks=%d wpm=%.1f",
@@ -325,34 +336,56 @@ class MainWindow(QMainWindow):
                 stats.get("wpm", 0),
             )
             self._stats_panel.update_stats(stats)
-            if self._report_panel:
-                self._report_panel.update_report(stats)
+            self._report_panel.update_report(stats)
+            self._refresh_dashboard_cards(stats)
         except Exception as e:
             logger.exception("Error updating panels: %s", e)
 
-    def _refresh_panels(self) -> None:
-        """
-        Periodic refresh of UI during capture.
+    def _refresh_dashboard_cards(self, stats: dict) -> None:
+        duration = float(stats.get("duration", 0)) if stats else 0.0
+        hours = int(duration // 3600)
+        minutes = int((duration % 3600) // 60)
+        seconds = int(duration % 60)
+        duration_text = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
-        Since stats are now emitted via signals from the worker thread,
-        this mainly handles log panel refresh and is optional.
-        """
-        # Manual log refresh if needed
+        total = int(stats.get("total_keystrokes", 0)) if stats else 0
+        wpm = float(stats.get("wpm", 0)) if stats else 0.0
+
+        active_window = (
+            stats.get("active_window")
+            or stats.get("current_window")
+            or stats.get("window_title")
+            or "N/A"
+        )
+        if len(str(active_window)) > 28:
+            active_window = f"{str(active_window)[:25]}..."
+
+        special_keys = int(stats.get("special_count", 0)) if stats else 0
+
+        self._dashboard_cards["total_keys"].setValue(f"{total:,}")
+        self._dashboard_cards["wpm"].setValue(f"{wpm:.1f}")
+        self._dashboard_cards["active_window"].setValue(str(active_window))
+        self._dashboard_cards["session_duration"].setValue(duration_text)
+        self._dashboard_cards["special_keys"].setValue(str(special_keys))
+        self._dashboard_cards["encryption"].setValue("Enabled" if self._encrypt else "Disabled")
+
+        if stats:
+            self._session_info.setText(
+                f"Session: {duration_text} • WPM {wpm:.1f} • Keys {total:,}"
+            )
+
+    def _refresh_panels(self) -> None:
         pass
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        """Clean up before closing window."""
         try:
-            # Stop capture if running
             if self._controller.running:
                 logger.info("Stopping capture before exit...")
                 self._controller.stop()
-            
-            # Disable auto-refresh
+
             self._logs_panel.disable_auto_refresh()
             self._refresh_timer.stop()
-            
         except Exception as e:
             logger.exception("Error during cleanup: %s", e)
-        
+
         event.accept()
